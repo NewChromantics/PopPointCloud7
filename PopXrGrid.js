@@ -38,20 +38,15 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 			
 	async function XrLoop(RenderContext,XrOnWaitForCallback)
 	{
-		const FrameCounter = new FrameCounter_t(`XR frame`);
-		function OnXrRender()
-		{
-			FrameCounter.Add();
-		}
-
 		while ( true )
 		{
 			try
 			{
 				LastXrRenderTimeMs = null;
 				const Device = await Pop.Xr.CreateDevice( RenderContext, GetXrRenderCommands, XrOnWaitForCallback );
-				//	this needs updating
-				Device.OnRender = OnXrRender;
+				App.BindXrControls( Device );
+
+				await Device.WaitForEnd();
 			}
 			catch(e)
 			{

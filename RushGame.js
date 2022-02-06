@@ -35,6 +35,13 @@ function GetPositionN(xyz,Index)
 	x += xyz[0];
 	y += xyz[1];
 	z += xyz[2];
+	
+	//	add a tiny offset to make it a bit more random
+	const RandomSize = CubeSize * 1.0;
+	x += (Math.random() - 0.5) * RandomSize;
+	y += (Math.random() - 0.5) * RandomSize;
+	z += (Math.random() - 0.5) * RandomSize;
+	
 	return CreateTranslationMatrix(x,y,z);
 	return [x,y,z];
 }
@@ -70,7 +77,7 @@ class VoxelShape_t
 		this.AddPosition([0,0,0]);
 		
 		let Length = 0.3;
-		for ( let z=-Length;	z<Length;	z+=CubeSize*2 )
+		for ( let z=0;	z<Length;	z+=CubeSize*2 )
 			this.AddPosition([0,0,-z]);
 	}
 	
@@ -98,9 +105,14 @@ class Weapon_t
 		return Math.floor( 1000 / this.FireRepeatPerSec );
 	}
 	
+	ReleaseFire()
+	{
+		this.LastFireTimeMs = null;
+	}
+	
 	GetFirePosition()
 	{
-		const Offset = [0,0,0.2];
+		const Offset = [0,0,-0.2];
 		const Transform = this.GetLocalToWorldTransform(Offset);
 		const Pos = PopMath.TransformPosition([0,0,0],Transform);
 		return Pos;
@@ -120,8 +132,9 @@ class Weapon_t
 
 	get Forward()
 	{
+		//	should use GetFirePosition()?
 		let LocalToWorld = this.GetLocalToWorldTransform();
-		let LocalForward = [0,0,1];
+		let LocalForward = [0,0,-1];
 		let LocalOrigin = [0,0,0];
 		LocalForward = PopMath.TransformPosition( LocalForward, LocalToWorld  );
 		LocalOrigin = PopMath.TransformPosition( LocalOrigin, LocalToWorld  );
@@ -179,7 +192,7 @@ class Projectile_t
 		this.Velocity = [0,0,0];
 		this.Drag = Drag;
 		
-		let GravityPerSec = -1 * GravityMult;
+		let GravityPerSec = -6 * GravityMult;
 		this.GravityForce = [0,GravityPerSec,0];
 		this.PendingForce = InitialForce;
 	}
@@ -222,7 +235,8 @@ class Game_t
 	{
 		if ( !this.Weapons[Name] )
 		{
-			this.Weapons[Name] = new Weapon_t([0,-0.3,0]);
+			const Offset = (Name=='Desktop') ? [0,-0.2,0] : [0,0,0];
+			this.Weapons[Name] = new Weapon_t(Offset);
 		}
 		return this.Weapons[Name];
 	}
@@ -260,7 +274,7 @@ class Game_t
 	OnDesktopFireUp()
 	{
 		const Weapon = this.GetWeapon('Desktop');
-		Weapon.LastFireTimeMs = null;
+		Weapon.ReleaseFire();
 	}
 	
 	
@@ -319,6 +333,38 @@ export default class App_t
 		const VertFilename = 'Geo.vert.glsl';
 		const FragFilename = 'Colour.frag.glsl';
 		CubeShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename);
+	}
+	
+	BindXrControls(Device)
+	{
+		const Game = this.Game;
+		Device.OnMouseMove = function(xyz,Button,InputName,Transform)
+		{
+			//	false when not tracking
+			if ( Transform )
+			{
+				const Weapon = Game.GetWeapon(InputName);
+				let Rotation = Transform.matrix;
+				PopMath.SetMatrixTranslation(Rotation,0,0,0,1);
+		
+				Weapon.SetPosition(xyz,Rotation);
+			}
+		}
+		
+		Device.OnMouseDown = function(xyz,Button,InputName,Transform)
+		{
+			//	update position as move isn't called when mouse is down
+			Device.OnMouseMove( ...arguments );
+			
+			const Weapon = Game.GetWeapon(InputName);
+			Game.OnFireWeapon(Weapon);
+		}
+
+		Device.OnMouseUp = function(xyz,Button,InputName,Transform)
+		{
+			const Weapon = Game.GetWeapon(InputName);
+			Weapon.ReleaseFire();
+		}
 	}
 	
 	BindMouseCameraControls(RenderView)
