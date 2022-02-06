@@ -69,7 +69,8 @@ class VoxelShape_t
 		this.Positions = [];
 		this.AddPosition([0,0,0]);
 		
-		for ( let z=-0.5;	z<0.5;	z+=CubeSize*2 )
+		let Length = 0.3;
+		for ( let z=-Length;	z<Length;	z+=CubeSize*2 )
 			this.AddPosition([0,0,-z]);
 	}
 	
@@ -84,7 +85,7 @@ class Weapon_t
 	constructor(LocalOriginOffset=[0,0,0])
 	{
 		this.LastFireTimeMs = null;		//	null button is up
-		this.FireRepeatPerSec = 20;
+		this.FireRepeatPerSec = 10;
 		
 		this.Shape = new VoxelShape_t();
 		this.Position = [0,0,0];
@@ -99,7 +100,7 @@ class Weapon_t
 	
 	GetFirePosition()
 	{
-		const Offset = [0,0,0.4];
+		const Offset = [0,0,0.2];
 		const Transform = this.GetLocalToWorldTransform(Offset);
 		const Pos = PopMath.TransformPosition([0,0,0],Transform);
 		return Pos;
@@ -172,15 +173,34 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms)
 
 class Projectile_t
 {
-	constructor(Position,Velocity)
+	constructor(Position,InitialForce,GravityMult=1,Drag=0.1)
 	{
 		this.Position = Position;
-		this.Velocity = Velocity;
+		this.Velocity = [0,0,0];
+		this.Drag = Drag;
+		
+		let GravityPerSec = -1 * GravityMult;
+		this.GravityForce = [0,GravityPerSec,0];
+		this.PendingForce = InitialForce;
 	}
 	
 	Move(TimestepSecs)
 	{
-		let Delta = Multiply3( this.Velocity, [TimestepSecs,TimestepSecs,TimestepSecs] );
+		const Timestep3 = [TimestepSecs,TimestepSecs,TimestepSecs];
+		
+		//	apply drag
+		const Damp = 1.0 - this.Drag;
+		const Damp3 = [Damp,Damp,Damp];
+		this.Velocity = Multiply3( this.Velocity, Damp3);
+		
+		//	apply forces
+		let Force = this.PendingForce.slice();
+		this.PendingForce = [0,0,0];
+		Force = Add3( Force, Multiply3( this.GravityForce, Timestep3 ) );
+		
+		this.Velocity = Add3( this.Velocity, Force );
+	
+		let Delta = Multiply3( this.Velocity, Timestep3 );
 		this.Position = Add3( this.Position, Delta );
 	}
 }
@@ -226,7 +246,7 @@ class Game_t
 	
 	OnFireWeapon(Weapon)
 	{
-		const MetresPerSec = 5;
+		const MetresPerSec = 10;
 		this.CreateProjectile( Weapon.GetFirePosition(), Weapon.Forward, MetresPerSec );
 		Weapon.LastFireTimeMs = Pop.GetTimeNowMs();
 	}
