@@ -94,6 +94,7 @@ class Weapon_t
 		this.LastFireTimeMs = null;		//	null button is up
 		this.FireRepeatPerSec = 10;
 		
+		this.LocalForward = [0,0,-1];
 		this.Shape = new VoxelShape_t();
 		this.Position = [0,0,0];
 		this.Rotation = [1,0,0,0,	0,1,0,0,	0,0,1,0,	0,0,0,1];
@@ -134,7 +135,7 @@ class Weapon_t
 	{
 		//	should use GetFirePosition()?
 		let LocalToWorld = this.GetLocalToWorldTransform();
-		let LocalForward = [0,0,-1];
+		let LocalForward = this.LocalForward;
 		let LocalOrigin = [0,0,0];
 		LocalForward = PopMath.TransformPosition( LocalForward, LocalToWorld  );
 		LocalOrigin = PopMath.TransformPosition( LocalOrigin, LocalToWorld  );
@@ -235,7 +236,7 @@ class Game_t
 	{
 		if ( !this.Weapons[Name] )
 		{
-			const Offset = (Name=='Desktop') ? [0,-0.2,0] : [0,0,0];
+			const Offset = (Name=='Desktop') ? [0,-0.3,0.3] : [0,0,0];
 			this.Weapons[Name] = new Weapon_t(Offset);
 		}
 		return this.Weapons[Name];
@@ -281,6 +282,8 @@ class Game_t
 	UpdateWeaponDesktop(Camera)
 	{
 		const Weapon = this.GetWeapon('Desktop');
+		//	forward seems right on webxr camera/transform, but not our camera...
+		Weapon.LocalForward = [0,0,1];
 		let Rotation = Camera.GetLocalRotationMatrix();
 		Rotation = PopMath.MatrixInverse4x4( Rotation );
 		let Position = Camera.Position;
