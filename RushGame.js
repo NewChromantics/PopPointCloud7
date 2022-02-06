@@ -6,7 +6,7 @@ import {CreateRandomImage} from './PopEngine/Images.js'
 import {GetRandomColour} from './PopEngine/Colour.js'
 import {Dot3,lerp,LengthSq3} from './PopEngine/Math.js'
 import * as PopMath from './PopEngine/Math.js'
-
+import Pop from './PopEngine/PopEngine.js'
 
 async function CreateUnitCubeTriangleBuffer(RenderContext)
 {
@@ -83,15 +83,23 @@ class Weapon_t
 {
 	constructor(LocalOriginOffset=[0,0,0])
 	{
+		this.LastFireTimeMs = null;		//	null button is up
+		this.FireRepeatPerSec = 20;
+		
 		this.Shape = new VoxelShape_t();
 		this.Position = [0,0,0];
 		this.Rotation = [1,0,0,0,	0,1,0,0,	0,0,1,0,	0,0,0,1];
 		this.LocalOriginOffset = LocalOriginOffset;
 	}
 	
+	get FireRepeatAfterMs()
+	{
+		return Math.floor( 1000 / this.FireRepeatPerSec );
+	}
+	
 	GetFirePosition()
 	{
-		const Offset = [0,0,0.7];
+		const Offset = [0,0,0.4];
 		const Transform = this.GetLocalToWorldTransform(Offset);
 		const Pos = PopMath.TransformPosition([0,0,0],Transform);
 		return Pos;
@@ -112,10 +120,13 @@ class Weapon_t
 	get Forward()
 	{
 		let LocalToWorld = this.GetLocalToWorldTransform();
-		let LocalForward = [0,0,-1];
+		let LocalForward = [0,0,1];
+		let LocalOrigin = [0,0,0];
 		LocalForward = PopMath.TransformPosition( LocalForward, LocalToWorld  );
-		LocalForward = PopMath.Normalise3( LocalForward );
-		return LocalForward;
+		LocalOrigin = PopMath.TransformPosition( LocalOrigin, LocalToWorld  );
+		let WorldForward = Subtract3( LocalForward, LocalOrigin );
+		WorldForward = PopMath.Normalise3( WorldForward );
+		return WorldForward;
 	}
 
 	SetPosition(Position,Rotation)
@@ -166,6 +177,12 @@ class Projectile_t
 		this.Position = Position;
 		this.Velocity = Velocity;
 	}
+	
+	Move(TimestepSecs)
+	{
+		let Delta = Multiply3( this.Velocity, [TimestepSecs,TimestepSecs,TimestepSecs] );
+		this.Position = Add3( this.Position, Delta );
+	}
 }
 
 class Game_t
@@ -207,15 +224,23 @@ class Game_t
 		this.Projectiles.push( new Projectile_t(Position, Velocity) );
 	}
 	
+	OnFireWeapon(Weapon)
+	{
+		const MetresPerSec = 5;
+		this.CreateProjectile( Weapon.GetFirePosition(), Weapon.Forward, MetresPerSec );
+		Weapon.LastFireTimeMs = Pop.GetTimeNowMs();
+	}
+		
 	OnDesktopFireDown()
 	{
-		console.log(`Fire`);
 		const Weapon = this.GetWeapon('Desktop');
-		this.CreateProjectile( Weapon.GetFirePosition(), Weapon.Forward, 0.4 );
+		this.OnFireWeapon(Weapon);
 	}
 	
 	OnDesktopFireUp()
 	{
+		const Weapon = this.GetWeapon('Desktop');
+		Weapon.LastFireTimeMs = null;
 	}
 	
 	
@@ -230,6 +255,28 @@ class Game_t
 		Weapon.SetPosition( Position, Rotation );
 	}
 	
+	Tick(TimestepSecs)
+	{
+		//	repeat fire weapons
+		function RepeatFireWeapon(Weapon)
+		{
+			if ( Weapon.LastFireTimeMs === null )
+				return;
+			const Elapsed = Pop.GetTimeNowMs() - Weapon.LastFireTimeMs;
+			if ( Elapsed > Weapon.FireRepeatAfterMs )
+				this.OnFireWeapon(Weapon);
+		}
+		const Weapons = this.GetWeapons();
+		Weapons.forEach( RepeatFireWeapon.bind(this) );
+	}
+	
+	UpdateProjectiles(TimestepSecs)
+	{
+		for ( let Projectile of this.Projectiles )
+		{
+			Projectile.Move(TimestepSecs);
+		}
+	}
 }
 
 
@@ -351,5 +398,12 @@ export default class App_t
 		
 
 		return [ClearCommand,...CubeCommands];
+	}
+	
+	Tick(TimestepSecs)
+	{
+		//	this will move to gpu physics later
+		this.Game.Tick(TimestepSecs);
+		this.Game.UpdateProjectiles(TimestepSecs);
 	}
 }

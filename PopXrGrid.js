@@ -1,7 +1,7 @@
 import Pop from './PopEngine/PopEngine.js'
 import FrameCounter_t from './PopEngine/FrameCounter.js'
 import App_t from './RushGame.js'
-
+import {WaitForFrame} from './PopEngine/PopWebApi.js'
 let LastXrRenderTimeMs = null;
 
 
@@ -13,6 +13,22 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 	
 	let App = new App_t();
 	App.BindMouseCameraControls( RenderView );
+		
+	//	simple thread for now, we will want to change this at some point to 
+	//	a) provide gpu access for physics updates
+	//	b) time it so its right after XR controller update
+	//	c) time it right after XR render? (for physics etc)
+	//	c) should it be async?...
+	async function TickThread()
+	{
+		while (true)
+		{
+			const TimestepSecs = await WaitForFrame();
+			App.Tick(TimestepSecs);
+		}
+	}
+	TickThread();
+		
 		
 	function GetXrRenderCommands()
 	{
