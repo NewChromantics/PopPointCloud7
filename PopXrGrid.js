@@ -13,7 +13,13 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 	
 	let App = new App_t();
 	App.BindMouseCameraControls( RenderView );
-		
+	
+	async function AppThread()
+	{
+		await App.GameIteration();
+	}
+	AppThread();
+	
 	//	simple thread for now, we will want to change this at some point to 
 	//	a) provide gpu access for physics updates
 	//	b) time it so its right after XR controller update

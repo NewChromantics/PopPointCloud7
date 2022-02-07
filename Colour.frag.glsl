@@ -1,5 +1,5 @@
 precision highp float;
-varying vec3 FragColour;
+varying vec4 FragColour;
 
 uniform bool MuteColour;
 uniform bool InvertColour;
@@ -81,7 +81,7 @@ void main()
 	#define HAS_DEPTH	false
 	if ( !HAS_DEPTH )
 	{
-		gl_FragColor.xyz = FragColour;
+		gl_FragColor = FragColour;
 		return;
 	}
 	

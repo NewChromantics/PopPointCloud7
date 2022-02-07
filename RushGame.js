@@ -8,6 +8,8 @@ import {Dot3,lerp,LengthSq3} from './PopEngine/Math.js'
 import * as PopMath from './PopEngine/Math.js'
 import Pop from './PopEngine/PopEngine.js'
 
+import ParseMagicaVox from './PopEngine/MagicaVox.js'
+
 async function CreateCubeTriangleBuffer(RenderContext)
 {
 	const Geometry = CreateCubeGeometry(-CubeSize,CubeSize);
@@ -154,17 +156,20 @@ class VoxelBuffer_t
 		this.Colours = null;
 	}
 	
-	LoadPositions(Positions,Colours=null)
+	LoadPositions(Positions,Colours=null,CenterPosition=[0,0,0])
 	{
 		//	todo: append to existing positions,
 		//		need to read latest texture (async op)
 		
 		function GetPositon4(xxx,Index)
 		{
+			if ( Index >= Positions.length )
+				return [0,0,0,0];
 			let xyz = Positions[Index].slice(0,3);
+			xyz = Add3( xyz, CenterPosition );
 			return [...xyz,1];
 		}
-			
+
 		function GetInitialVelocity4(xxx,Index)
 		{
 			let Scale = Math.random();
@@ -172,6 +177,7 @@ class VoxelBuffer_t
 			Scale = Scale * Scale * Scale * Scale * Scale;
 			
 			Scale *= 0.4;
+			Scale=0;
 			let x = Math.random()-0.5;
 			let y = Math.random()-0.5;
 			let z = Math.random()-0.5;
@@ -181,7 +187,7 @@ class VoxelBuffer_t
 			
 		let w = PopMath.GetNextPowerOf2(Math.floor( Math.sqrt(Positions.length) ));
 		let h = w;//	this could reduce until w*h < cubecount
-		let Float4s = Positions.map(GetPositon4);
+		let Float4s = new Array(w*h).fill(0).map(GetPositon4);
 		Float4s = new Float32Array(Float4s.flat(2));
 		this.PositionsTexture = new Pop.Image();
 		this.PositionsTexture.WritePixels( w, h, Float4s, 'Float4' );
@@ -207,8 +213,16 @@ class VoxelBuffer_t
 		this.VelocitysTexture = new Pop.Image();
 		this.VelocitysTexture.WritePixels( w, h, Velocity4s, 'Float4' );
 		
+		function TweakColour(rgba)
+		{
+			let ToneChange = (Math.random()-0.5)*0.10;
+			rgba[0] += ToneChange;
+			rgba[1] += ToneChange;
+			rgba[2] += ToneChange;
+			return rgba;
+		}
 		//	instancing buffer
-		this.Colours = Colours;
+		this.Colours = new Float32Array(Colours.map(TweakColour).flat(2));
 	}
 }
 
@@ -216,7 +230,7 @@ class VoxelBuffer_t
 const CubeCount = 64*64;
 function GetCubePositionN(xyz,Index)
 {
-	xyz = CubePosition;
+	xyz = [0,0,0];
 	const Div = Math.floor(Math.cbrt(CubeCount));
 	let x = (Index % Div);
 	let y = Math.floor( (Index % (Div*Div)) / Div );
@@ -254,12 +268,14 @@ function GetCubeLocalToWorldN(xyz,Index)
 function GetColourN(xyz,Index)
 {
 	if ( Index == 0 )
-		return [0,1,0];
-	return GetRandomColour();
+		return [0,1,0,0];
+	let rgb = GetRandomColour();
 	const r = lerp( 0.4, 0.9, Math.random() );
 	const b = lerp( 0.4, 0.9, Math.random() );
 	const g = lerp( 0.4, 0.9, Math.random() );
-	return [r,g,b];
+	const a = 1;
+	//return [r,g,b,a];
+	return [...rgb,a];
 }
 
 
@@ -268,14 +284,14 @@ let CubePhysicsShader = null;
 let AppCamera = new Camera_t();
 //	try and emulate default XR pose a bit
 AppCamera.Position = [0,0,0];
-AppCamera.LookAt = [0,1,-3];
+AppCamera.LookAt = [0,1,-2];
 let DefaultDepthTexture = CreateRandomImage(16,16);
-let CubePosition = AppCamera.LookAt.slice();
-let CubeSize = 0.025;
+let VoxelCenterPosition = AppCamera.LookAt.slice();
+let CubeSize = 0.02;
 
 
-const LocalToWorldTransforms = new Float32Array( new Array(CubeCount).fill(CubePosition.slice()).map( GetCubeLocalToWorldN ).flat(2) );
-const Colours = new Float32Array( new Array(CubeCount).fill(0).map( GetColourN ).flat(2) );
+const LocalToWorldTransforms = new Float32Array( new Array(CubeCount).fill(0).map( GetCubeLocalToWorldN ).flat(2) );
+const RandomColours = new Array(CubeCount).fill(0).map( GetColourN );
 
 
 class VoxelShape_t
@@ -288,6 +304,7 @@ class VoxelShape_t
 		let Length = 0.3;
 		for ( let z=0;	z<Length;	z+=CubeSize*2 )
 			this.AddPosition([0,0,-z]);
+		this.Length = Length;
 	}
 	
 	AddPosition(xyz)
@@ -322,7 +339,9 @@ class Weapon_t
 	
 	GetFirePosition()
 	{
-		const Offset = [0,0,-0.2];
+		//	gr: slightly random offset to stop strobing positions appearing in the same place
+		let End = this.Shape.Length - (Math.random()*0.20);
+		const Offset = [0,0,-End];
 		const Transform = this.GetLocalToWorldTransform(Offset);
 		const Pos = PopMath.TransformPosition([0,0,0],Transform);
 		return Pos;
@@ -384,7 +403,7 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms)
 
 	const Uniforms = Object.assign({},CameraUniforms);
 	Uniforms.LocalToWorldTransform = CubeTransforms;
-	Uniforms.Colour = Colours.slice( 0, CubeTransforms.length*3 );
+	Uniforms.Colour = RandomColours.slice( 0, CubeTransforms.length*4 );
 
 	const State = {};
 	State.BlendMode = 'Blit';
@@ -548,16 +567,14 @@ class Game_t
 	
 	GetPhysicsRenderCommands(RenderContext,TimestepSecs)
 	{
-		if ( !this.CubeVoxelsBuffer )
-		{
-			let Positions = new Array(CubeCount).fill(0).map(GetCubePositionN);
-			let Voxels = new VoxelBuffer_t();
-			Voxels.LoadPositions( Positions, Colours );
-			this.CubeVoxelsBuffer = Voxels;
-		}
-		
 		const Projectiles = this.Projectiles;
-		return GetRenderCommandsUpdatePhysicsTextures( RenderContext, this.CubeVoxelsBuffer.PositionsTexture, this.CubeVoxelsBuffer.VelocitysTexture, this.CubeVoxelsBuffer.TempTexture, Projectiles );
+		const Commands = [];
+		for ( let VoxelBuffer of this.VoxelBuffers )
+		{
+			const SomeCommands = GetRenderCommandsUpdatePhysicsTextures( RenderContext, VoxelBuffer.PositionsTexture, VoxelBuffer.VelocitysTexture, VoxelBuffer.TempTexture, Projectiles );
+			Commands.push(...SomeCommands);
+		}
+		return Commands;
 	}
 	
 	//	gr: this should really return commands?
@@ -577,6 +594,46 @@ class Game_t
 		RenderContext.Render(Commands);
 	}
 	
+	async WaitForEnemniesDestroyed()
+	{
+		let x = 999;
+		while ( x != 0 )
+			await Pop.Yield(999*10000);
+	}
+	
+	async LoadLevel()
+	{
+		//	generate voxel enemies
+		this.VoxelBuffers = [];
+		
+		if ( true )
+		{
+			let Positions = new Array(CubeCount).fill(0).map(GetCubePositionN);
+			let Voxels = new VoxelBuffer_t();
+			Voxels.LoadPositions( Positions, RandomColours, VoxelCenterPosition );
+			this.VoxelBuffers.push(Voxels);
+		}
+		
+		if ( false )
+		{
+			const VoxContents = await Pop.FileSystem.LoadFileAsArrayBufferAsync(`Models/Taxi.vox`);
+			const Geometry = await ParseMagicaVox( VoxContents );
+			let Voxels = new VoxelBuffer_t();
+			Voxels.LoadPositions( Geometry.Positions, Geometry.Colours, VoxelCenterPosition );
+			this.VoxelBuffers.push(Voxels);
+		}
+			
+	}
+	
+	async RunGameIteration()
+	{
+		//	show hello
+		//	load assets
+		await this.LoadLevel();
+		//	wait for all enemies shot
+		await this.WaitForEnemniesDestroyed();
+		//	show game over
+	}
 }
 
 
@@ -722,9 +779,11 @@ export default class App_t
 			CubeCommands.push(Command);
 		}
 		
-		//RenderCubes( PushCommand, RenderContext, CameraUniforms, LocalToWorldTransforms );
-		RenderVoxelBufferCubes( PushCommand, RenderContext, CameraUniforms, this.Game.CubeVoxelsBuffer );
-
+		for ( let Voxels of this.Game.VoxelBuffers )
+		{
+			RenderVoxelBufferCubes( PushCommand, RenderContext, CameraUniforms, Voxels );
+		}
+		
 		this.Game.UpdateWeaponDesktop(Camera);
 		
 		for ( let Weapon of this.Game.GetWeapons() )
@@ -750,5 +809,11 @@ export default class App_t
 	async GpuTick(RenderContext,TimestepSecs)
 	{
 		return this.Game.GpuTick(RenderContext,TimestepSecs);
+	}
+	
+	async GameIteration()
+	{
+		//	create game
+		await this.Game.RunGameIteration();
 	}
 }

@@ -1,5 +1,5 @@
-attribute float3 LocalPosition;
-attribute float3 LocalUv;
+attribute vec3 LocalPosition;
+attribute vec3 LocalUv;
 varying float3 FragWorldPosition;
 varying float3 FragLocalPosition;
 varying float2 FragLocalUv;
@@ -7,12 +7,12 @@ varying vec3 FragCameraPosition;	//	position in camera space
 varying vec2 FragViewUv;
 varying vec3 ClipPosition;
 varying float TriangleIndex;
-varying vec3 FragColour;
+varying vec4 FragColour;
 
 attribute mat4 LocalToWorldTransform;
 uniform mat4 WorldToCameraTransform;
 uniform mat4 CameraProjectionTransform;
-attribute float3 Colour;
+attribute vec4 Colour;
 
 void main()
 {
@@ -31,7 +31,7 @@ void main()
 	
 	FragWorldPosition = WorldPos.xyz;
 	//FragColour = Colour;//LocalPosition;
-	FragColour = float3( LocalUv );
+	FragColour = vec4( LocalUv, 1 );
 	FragLocalPosition = LocalPosition;
 	FragLocalUv = LocalUv.xy;
 	TriangleIndex = LocalUv.z;
