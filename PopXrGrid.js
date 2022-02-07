@@ -72,7 +72,14 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 			LastXrRenderTimeMs = null;
 
 		let TimestepSecs = 1/60;
-		await App.GpuTick(RenderContext,TimestepSecs);
+		try
+		{
+			await App.GpuTick(RenderContext,TimestepSecs);
+		}
+		catch(e)
+		{
+			console.error(`GpuTick Exception; ${e}`);
+		}
 	
 		//	can't yield if we're doing gpu ticks
 		if ( LastXrRenderTimeMs )

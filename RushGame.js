@@ -17,6 +17,64 @@ async function CreateUnitCubeTriangleBuffer(RenderContext)
 }
 
 
+function CreateBlitGeometry()
+{
+	let l = 0;
+	let t = 0;
+	let r = 1;
+	let b = 1;
+	const VertexData = [	l,t,	r,t,	r,b,	r,b, l,b, l,t	];
+	
+	const TexCoord = {};
+	TexCoord.Size = 2;
+	TexCoord.Data = VertexData;
+
+	const Geometry = {};
+	Geometry.TexCoord = TexCoord;
+	return Geometry;
+}
+
+async function CreateBlitTriangleBuffer(RenderContext)
+{
+	const Geometry = CreateBlitGeometry();
+	const TriangleIndexes = undefined;
+	const TriangleBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
+	return TriangleBuffer;
+}
+
+let BlitCopyShader;
+let BlitUpdatePositions;
+
+function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,TempTexture)
+{
+	const Commands = [];
+	
+	const BlitGeo = AssetManager.GetAsset('BlitQuad',RenderContext);
+
+	//	copy old positions to temp texture
+	{
+		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
+		const Uniforms = {};
+		Uniforms.SourceTexture = PositionTexture;
+		Commands.push(['SetRenderTarget',TempTexture]);
+		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms]);
+	}
+	
+	//	update positions texture
+	{
+		const UpdatePositionsShader = AssetManager.GetAsset(BlitUpdatePositions,RenderContext);
+		const Uniforms = {};
+		Uniforms.OldPositionsTexture = TempTexture;
+		Commands.push(['SetRenderTarget',PositionTexture]);
+		Commands.push(['Draw',BlitGeo,UpdatePositionsShader,Uniforms]);
+	}
+	
+	return Commands;
+}
+
+
+
+
 
 const CubeCount = 128*128;
 function GetCubePositionN(xyz,Index)
@@ -339,7 +397,7 @@ class Game_t
 	}
 	
 	
-	GetPhysicsRenderCommands(TimestepSecs)
+	GetPhysicsRenderCommands(RenderContext,TimestepSecs)
 	{
 		if ( !this.PhysicsPositions )
 		{
@@ -365,8 +423,13 @@ class Game_t
 				}
 			}
 			this.PhysicsPositionsUvs = this.PhysicsPositionsUvs.slice(0,CubeCount);
+			
+			//	create the temp texture (todo: should be using a pool)
+			this.PhysicsPositionsTempTexture = new Pop.Image();
+			this.PhysicsPositionsTempTexture.WritePixels( w, h, Float4s, 'Float4' );
 		}
-		return [];
+		
+		return GetRenderCommandsUpdatePhysicsTextures( RenderContext, this.PhysicsPositions, this.PhysicsPositionsTempTexture );
 	}
 	
 	//	gr: this should really return commands?
@@ -379,7 +442,7 @@ class Game_t
 		}
 
 		//	generate rendercommands then run them
-		const Commands = this.GetPhysicsRenderCommands(TimestepSecs);
+		const Commands = this.GetPhysicsRenderCommands(RenderContext,TimestepSecs);
 		//	also... dont need to wait if we're not reading stuff back
 		//	this causes 2 waits for animations
 		//await RenderContext.Render(Commands);
@@ -404,6 +467,7 @@ export default class App_t
 		if ( CubeShader )
 			return;
 		AssetManager.RegisterAssetAsyncFetchFunction('Cube01', CreateUnitCubeTriangleBuffer );
+		AssetManager.RegisterAssetAsyncFetchFunction('BlitQuad', CreateBlitTriangleBuffer );
 
 		const VertFilename = 'Geo.vert.glsl';
 		const FragFilename = 'Colour.frag.glsl';
@@ -411,6 +475,10 @@ export default class App_t
 
 		const VertPhysicsFilename = 'PhysicsGeo.vert.glsl';
 		CubePhysicsShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename);
+
+		const VertBlitQuadFilename = 'BlitQuad.vert.glsl';
+		BlitCopyShader = AssetManager.RegisterShaderAssetFilename('BlitCopy.frag.glsl',VertBlitQuadFilename);
+		BlitUpdatePositions = AssetManager.RegisterShaderAssetFilename('BlitUpdatePositions.frag.glsl',VertBlitQuadFilename);
 	}
 	
 	BindXrControls(Device)
