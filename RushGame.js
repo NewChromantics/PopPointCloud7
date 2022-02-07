@@ -18,8 +18,8 @@ async function CreateUnitCubeTriangleBuffer(RenderContext)
 
 
 
-const CubeCount = 10*1000;
-function GetPositionN(xyz,Index)
+const CubeCount = 32*32;
+function GetCubePositionN(xyz,Index)
 {
 	const Div = Math.floor(Math.cbrt(CubeCount));
 	let x = (Index % Div);
@@ -42,9 +42,15 @@ function GetPositionN(xyz,Index)
 	y += (Math.random() - 0.5) * RandomSize;
 	z += (Math.random() - 0.5) * RandomSize;
 	
-	return CreateTranslationMatrix(x,y,z);
 	return [x,y,z];
 }
+
+function GetCubeLocalToWorldN(xyz,Index)
+{
+	xyz = GetCubePositionN(xyz,Index);
+	return CreateTranslationMatrix(...xyz);
+}
+
 function GetColourN(xyz,Index)
 {
 	return GetRandomColour();
@@ -56,6 +62,7 @@ function GetColourN(xyz,Index)
 
 
 let CubeShader = null;
+let CubePhysicsShader = null;
 let AppCamera = new Camera_t();
 //	try and emulate default XR pose a bit
 AppCamera.Position = [0,0,0];
@@ -65,8 +72,8 @@ let CubePosition = AppCamera.LookAt.slice();
 let CubeSize = 0.02;
 
 
-const LocalToWorldTransforms = new Float32Array( new Array(CubeCount).fill(CubePosition.slice()).map( GetPositionN ).flat(2) );
-const Colours = new Float32Array( new Array(LocalToWorldTransforms.length).fill(0).map( GetColourN ).flat(2) );
+const LocalToWorldTransforms = new Float32Array( new Array(CubeCount).fill(CubePosition.slice()).map( GetCubeLocalToWorldN ).flat(2) );
+const Colours = new Float32Array( new Array(CubeCount).fill(0).map( GetColourN ).flat(2) );
 
 
 class VoxelShape_t
@@ -175,8 +182,32 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms)
 
 	const Uniforms = Object.assign({},CameraUniforms);
 	Uniforms.LocalToWorldTransform = CubeTransforms;
-	Uniforms.Colour = Colours;
+	Uniforms.Colour = Colours.slice( 0, CubeTransforms.length*3 );
 
+	const State = {};
+	State.BlendMode = 'Blit';
+	//State.DepthRead = false;
+		
+	const DrawCube = ['Draw',Geo,Shader,Uniforms,State];
+	PushCommand( DrawCube );
+}
+
+function RenderPhysicsCubes(PushCommand,RenderContext,CameraUniforms,PositionsTexture,PhysicsPositionUvs)
+{
+	if ( !PositionsTexture )
+		return;
+		
+	const Geo = AssetManager.GetAsset('Cube01',RenderContext);
+	const Shader = AssetManager.GetAsset(CubePhysicsShader,RenderContext);
+
+	const Uniforms = Object.assign({},CameraUniforms);
+	//Uniforms.LocalToWorldTransform = CubeTransforms;
+	Uniforms.Colour = Colours.slice( 0, PhysicsPositionUvs.length*3 );
+
+	Uniforms.PhysicsPositionsTexture = PositionsTexture;
+	Uniforms.PhysicsPositionsTextureSize = [PositionsTexture.GetWidth(),PositionsTexture.GetHeight()];
+	Uniforms.PhysicsPositionUv = PhysicsPositionUvs;
+	
 	const State = {};
 	State.BlendMode = 'Blit';
 	//State.DepthRead = false;
@@ -307,13 +338,50 @@ class Game_t
 		Weapons.forEach( RepeatFireWeapon.bind(this) );
 	}
 	
-	UpdateProjectiles(TimestepSecs)
+	
+	GetPhysicsRenderCommands(TimestepSecs)
+	{
+		if ( !this.PhysicsPositions )
+		{
+			function GetPositon4(n,Index)
+			{
+				let xyz = GetCubePositionN(CubePosition,Index);
+				return [...xyz,1];
+			}
+			let w = 32;
+			let h = 32;
+			let Float4s = new Array(w*h).fill(0).map(GetPositon4);
+			Float4s = new Float32Array(Float4s.flat(2));
+			this.PhysicsPositions = new Pop.Image();
+			this.PhysicsPositions.WritePixels( w, h, Float4s, 'Float4' );
+			this.PhysicsPositionsUvs = [];
+			for ( let y=0;	y<h;	y++ )
+			{
+				for ( let x=0;	x<w;	x++ )
+				{
+					let uv = [x/w,y/h];
+					this.PhysicsPositionsUvs.push(uv);
+				}
+			}
+			//this.PhysicsPositionsUvs = this.PhysicsPositionsUvs.flat(2);
+		}
+		return [];
+	}
+	
+	//	gr: this should really return commands?
+	//		depends if we need to read it back...
+	async GpuTick(RenderContext,TimestepSecs)
 	{
 		for ( let Projectile of this.Projectiles )
 		{
 			Projectile.Move(TimestepSecs);
 		}
+
+		//	generate rendercommands then run them
+		const Commands = this.GetPhysicsRenderCommands(TimestepSecs);
+		await RenderContext.Render(Commands);
 	}
+	
 }
 
 
@@ -336,6 +404,9 @@ export default class App_t
 		const VertFilename = 'Geo.vert.glsl';
 		const FragFilename = 'Colour.frag.glsl';
 		CubeShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename);
+
+		const VertPhysicsFilename = 'PhysicsGeo.vert.glsl';
+		CubePhysicsShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename);
 	}
 	
 	BindXrControls(Device)
@@ -450,7 +521,8 @@ export default class App_t
 			CubeCommands.push(Command);
 		}
 		
-		RenderCubes( PushCommand, RenderContext, CameraUniforms, LocalToWorldTransforms );
+		//RenderCubes( PushCommand, RenderContext, CameraUniforms, LocalToWorldTransforms );
+		RenderPhysicsCubes( PushCommand, RenderContext, CameraUniforms, this.Game.PhysicsPositions, this.Game.PhysicsPositionsUvs );
 
 		this.Game.UpdateWeaponDesktop(Camera);
 		
@@ -471,8 +543,11 @@ export default class App_t
 	
 	Tick(TimestepSecs)
 	{
-		//	this will move to gpu physics later
 		this.Game.Tick(TimestepSecs);
-		this.Game.UpdateProjectiles(TimestepSecs);
+	}
+	
+	async GpuTick(RenderContext,TimestepSecs)
+	{
+		return this.Game.GpuTick(RenderContext,TimestepSecs);
 	}
 }

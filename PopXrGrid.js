@@ -64,27 +64,40 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 	
 	while ( RenderView )
 	{
-		let Commands = [];
-		try
-		{
-			Commands = App.GetDesktopRenderCommands(RenderContext,RenderView);
-		}
-		catch(e)
-		{
-			console.error(e);
-			const ClearRed = ['SetRenderTarget',null,[1,0,0]];
-			Commands.splice(0,0,ClearRed);
-		}
+		const MinWaitPromise = Pop.Yield(1000/60);
 		
-		await RenderContext.Render(Commands);
-		FrameCounter.Add();
-
 		//	only intermediately render if xr is running
 		//	todo: check time since render and "turn on" again if we havent XR rendered for a while
 		if ( Pop.GetTimeNowMs() - LastXrRenderTimeMs > 2*1000 )
 			LastXrRenderTimeMs = null;
+
+		let TimestepSecs = 1/60;
+		await App.GpuTick(RenderContext,TimestepSecs);
+	
+		//	can't yield if we're doing gpu ticks
 		if ( LastXrRenderTimeMs )
-			await Pop.Yield(10*1000);
+		{
+			//if ( LastXrRenderTimeMs )
+			//	await Pop.Yield(10*1000);
+		}
+		else
+		{
+			let Commands = [];
+			try
+			{
+				Commands = App.GetDesktopRenderCommands(RenderContext,RenderView);
+			}
+			catch(e)
+			{
+				console.error(e);
+				const ClearRed = ['SetRenderTarget',null,[1,0,0]];
+				Commands.splice(0,0,ClearRed);
+			}
+			
+			await RenderContext.Render(Commands);
+			FrameCounter.Add();
+		}
+		await MinWaitPromise;
 	}
 }
 
