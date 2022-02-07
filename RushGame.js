@@ -284,6 +284,7 @@ let AppCamera = new Camera_t();
 //	try and emulate default XR pose a bit
 AppCamera.Position = [0,0,0];
 AppCamera.LookAt = [0,1,-2];
+AppCamera.FovVertical = 80;
 let DefaultDepthTexture = CreateRandomImage(16,16);
 let VoxelCenterPosition = AppCamera.LookAt.slice();
 let CubeSize = 0.02;
@@ -481,6 +482,7 @@ class Game_t
 	{
 		this.Weapons = {};	//	named weapons for different inputs
 		this.Projectiles = [];
+		this.WorldBoundsSphere = [0,0,0,20];
 	}
 	
 	GetWeapons()
@@ -492,7 +494,7 @@ class Game_t
 	{
 		if ( !this.Weapons[Name] )
 		{
-			const Offset = (Name=='Desktop') ? [0,-0.3,0.3] : [0,0,0];
+			const Offset = (Name=='Desktop') ? [0,-0.15,0.3] : [0,0,0];
 			this.Weapons[Name] = new Weapon_t(Offset);
 		}
 		return this.Weapons[Name];
@@ -550,6 +552,14 @@ class Game_t
 	
 	Tick(TimestepSecs)
 	{
+		function ProjectileInsideBounds(Projectile)
+		{
+			let Distance = PopMath.Distance3(Projectile.Position,this.WorldBoundsSphere);
+			return Distance <= this.WorldBoundsSphere[3]; 
+		}
+		//	cull old projectiles
+		this.Projectiles = this.Projectiles.filter(ProjectileInsideBounds.bind(this));
+	
 		//	repeat fire weapons
 		function RepeatFireWeapon(Weapon)
 		{
@@ -709,10 +719,12 @@ export default class App_t
 			{
 				if ( FirstDown )
 					Game.OnDesktopFireDown();
-				Camera.OnCameraOrbit( x, y, 0, FirstDown!=false );
 			}
 			
 			if ( Button == 'Right' )
+				Camera.OnCameraFirstPersonRotate( x, y, 0, FirstDown!=false );
+			
+			if ( Button == 'Middle' )
 				Camera.OnCameraPan( x, y, 0, FirstDown!=false );
 		}
 		
