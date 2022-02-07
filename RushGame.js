@@ -379,7 +379,10 @@ class Game_t
 
 		//	generate rendercommands then run them
 		const Commands = this.GetPhysicsRenderCommands(TimestepSecs);
-		await RenderContext.Render(Commands);
+		//	also... dont need to wait if we're not reading stuff back
+		//	this causes 2 waits for animations
+		//await RenderContext.Render(Commands);
+		RenderContext.Render(Commands);
 	}
 	
 }
