@@ -144,11 +144,79 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Ve
 
 
 
+class VoxelBuffer_t
+{
+	constructor()
+	{
+		this.PositionsTexture = null;
+		this.TempTexture = null;
+		this.VelocitysTexture = null;
+		this.Colours = null;
+	}
+	
+	LoadPositions(Positions,Colours=null)
+	{
+		//	todo: append to existing positions,
+		//		need to read latest texture (async op)
+		
+		function GetPositon4(xxx,Index)
+		{
+			let xyz = Positions[Index].slice(0,3);
+			return [...xyz,1];
+		}
+			
+		function GetInitialVelocity4(xxx,Index)
+		{
+			let Scale = Math.random();
+			//	make it less frequent for a high-speed fling
+			Scale = Scale * Scale * Scale * Scale * Scale;
+			
+			Scale *= 0.4;
+			let x = Math.random()-0.5;
+			let y = Math.random()-0.5;
+			let z = Math.random()-0.5;
+			let Gravity = 0;
+			return [x*Scale,y*Scale,z*Scale,Gravity];
+		}
+			
+		let w = PopMath.GetNextPowerOf2(Math.floor( Math.sqrt(Positions.length) ));
+		let h = w;//	this could reduce until w*h < cubecount
+		let Float4s = Positions.map(GetPositon4);
+		Float4s = new Float32Array(Float4s.flat(2));
+		this.PositionsTexture = new Pop.Image();
+		this.PositionsTexture.WritePixels( w, h, Float4s, 'Float4' );
+		
+		//	make this auto generative
+		this.PositionsTextureUvs = [];
+		for ( let y=0;	y<h;	y++ )
+		{
+			for ( let x=0;	x<w;	x++ )
+			{
+				let uv = [x/w,y/h];
+				this.PositionsTextureUvs.push(uv);
+			}
+		}
+		this.PositionsTextureUvs = this.PositionsTextureUvs.slice(0,Positions.length);
+			
+		//	create the temp texture (todo: should be using a pool)
+		this.TempTexture = new Pop.Image();
+		this.TempTexture.WritePixels( w, h, Float4s, 'Float4' );
+			
+		let Velocity4s = new Array(w*h).fill(0).map(GetInitialVelocity4);
+		Velocity4s = new Float32Array(Velocity4s.flat(2));
+		this.VelocitysTexture = new Pop.Image();
+		this.VelocitysTexture.WritePixels( w, h, Velocity4s, 'Float4' );
+		
+		//	instancing buffer
+		this.Colours = Colours;
+	}
+}
 
 
 const CubeCount = 64*64;
 function GetCubePositionN(xyz,Index)
 {
+	xyz = CubePosition;
 	const Div = Math.floor(Math.cbrt(CubeCount));
 	let x = (Index % Div);
 	let y = Math.floor( (Index % (Div*Div)) / Div );
@@ -326,9 +394,9 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms)
 	PushCommand( DrawCube );
 }
 
-function RenderPhysicsCubes(PushCommand,RenderContext,CameraUniforms,PositionsTexture,PhysicsPositionUvs)
+function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsBuffer)
 {
-	if ( !PositionsTexture )
+	if ( !VoxelsBuffer )
 		return;
 		
 	const Geo = AssetManager.GetAsset('Cube',RenderContext);
@@ -336,11 +404,13 @@ function RenderPhysicsCubes(PushCommand,RenderContext,CameraUniforms,PositionsTe
 
 	const Uniforms = Object.assign({},CameraUniforms);
 	//Uniforms.LocalToWorldTransform = CubeTransforms;
-	Uniforms.Colour = Colours.slice( 0, PhysicsPositionUvs.length*3 );
+	Uniforms.Colour = VoxelsBuffer.Colours;
+
+	let PositionsTexture = VoxelsBuffer.PositionsTexture;
 
 	Uniforms.PhysicsPositionsTexture = PositionsTexture;
 	Uniforms.PhysicsPositionsTextureSize = [PositionsTexture.GetWidth(),PositionsTexture.GetHeight()];
-	Uniforms.PhysicsPositionUv = PhysicsPositionUvs;
+	Uniforms.PhysicsPositionUv = VoxelsBuffer.PositionsTextureUvs;
 	
 	const State = {};
 	State.BlendMode = 'Blit';
@@ -478,60 +548,16 @@ class Game_t
 	
 	GetPhysicsRenderCommands(RenderContext,TimestepSecs)
 	{
-		if ( !this.PhysicsPositions )
+		if ( !this.CubeVoxelsBuffer )
 		{
-			function GetPositon4(xxx,Index)
-			{
-				let xyz = GetCubePositionN(CubePosition,Index);
-				return [...xyz,1];
-			}
-			
-			function GetInitialVelocity4(xxx,Index)
-			{
-				let Scale = Math.random();
-				//	make it less frequent for a high-speed fling
-				Scale = Scale * Scale * Scale * Scale * Scale;
-				
-				Scale *= 0.4;
-				let x = Math.random()-0.5;
-				let y = Math.random()-0.5;
-				let z = Math.random()-0.5;
-				let Gravity = 0;
-				return [x*Scale,y*Scale,z*Scale,Gravity];
-			}
-			
-			let w = PopMath.GetNextPowerOf2(Math.floor( Math.sqrt(CubeCount) ));
-			let h = w;//	this could reduce until w*h < cubecount
-			let Float4s = new Array(w*h).fill(0).map(GetPositon4);
-			Float4s = new Float32Array(Float4s.flat(2));
-			this.PhysicsPositions = new Pop.Image();
-			this.PhysicsPositions.WritePixels( w, h, Float4s, 'Float4' );
-			this.PhysicsPositionsUvs = [];
-			for ( let y=0;	y<h;	y++ )
-			{
-				for ( let x=0;	x<w;	x++ )
-				{
-					let uv = [x/w,y/h];
-					this.PhysicsPositionsUvs.push(uv);
-				}
-			}
-			this.PhysicsPositionsUvs = this.PhysicsPositionsUvs.slice(0,CubeCount);
-			
-			//	create the temp texture (todo: should be using a pool)
-			this.PhysicsPositionsTempTexture = new Pop.Image();
-			this.PhysicsPositionsTempTexture.WritePixels( w, h, Float4s, 'Float4' );
-			
-			//this.PhysicsPositionsTempTexture.SetLinearFilter(false);
-			//this.PhysicsPositions.SetLinearFilter(false);
-			
-			let Velocity4s = new Array(w*h).fill(0).map(GetInitialVelocity4);
-			Velocity4s = new Float32Array(Velocity4s.flat(2));
-			this.PhysicsVelocitys = new Pop.Image();
-			this.PhysicsVelocitys.WritePixels( w, h, Velocity4s, 'Float4' );
+			let Positions = new Array(CubeCount).fill(0).map(GetCubePositionN);
+			let Voxels = new VoxelBuffer_t();
+			Voxels.LoadPositions( Positions, Colours );
+			this.CubeVoxelsBuffer = Voxels;
 		}
 		
 		const Projectiles = this.Projectiles;
-		return GetRenderCommandsUpdatePhysicsTextures( RenderContext, this.PhysicsPositions, this.PhysicsVelocitys, this.PhysicsPositionsTempTexture, Projectiles );
+		return GetRenderCommandsUpdatePhysicsTextures( RenderContext, this.CubeVoxelsBuffer.PositionsTexture, this.CubeVoxelsBuffer.VelocitysTexture, this.CubeVoxelsBuffer.TempTexture, Projectiles );
 	}
 	
 	//	gr: this should really return commands?
@@ -697,7 +723,7 @@ export default class App_t
 		}
 		
 		//RenderCubes( PushCommand, RenderContext, CameraUniforms, LocalToWorldTransforms );
-		RenderPhysicsCubes( PushCommand, RenderContext, CameraUniforms, this.Game.PhysicsPositions, this.Game.PhysicsPositionsUvs );
+		RenderVoxelBufferCubes( PushCommand, RenderContext, CameraUniforms, this.Game.CubeVoxelsBuffer );
 
 		this.Game.UpdateWeaponDesktop(Camera);
 		
