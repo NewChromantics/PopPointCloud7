@@ -488,7 +488,11 @@ class Game_t
 			
 			function GetInitialVelocity4(xxx,Index)
 			{
-				let Scale = Math.random() * 0.4;
+				let Scale = Math.random();
+				//	make it less frequent for a high-speed fling
+				Scale = Scale * Scale * Scale * Scale * Scale;
+				
+				Scale *= 0.4;
 				let x = Math.random()-0.5;
 				let y = Math.random()-0.5;
 				let z = Math.random()-0.5;
