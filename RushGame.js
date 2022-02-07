@@ -156,7 +156,7 @@ class VoxelBuffer_t
 		this.Colours = null;
 	}
 	
-	LoadPositions(Positions,Colours=null,CenterPosition=[0,0,0])
+	LoadPositions(Positions,Colours=null,CenterPosition=[0,0,0],InitialVelocityScale=0)
 	{
 		//	todo: append to existing positions,
 		//		need to read latest texture (async op)
@@ -176,8 +176,7 @@ class VoxelBuffer_t
 			//	make it less frequent for a high-speed fling
 			Scale = Scale * Scale * Scale * Scale * Scale;
 			
-			Scale *= 0.4;
-			Scale=0;
+			Scale *= InitialVelocityScale;
 			let x = Math.random()-0.5;
 			let y = Math.random()-0.5;
 			let z = Math.random()-0.5;
@@ -610,7 +609,7 @@ class Game_t
 		{
 			let Positions = new Array(CubeCount).fill(0).map(GetCubePositionN);
 			let Voxels = new VoxelBuffer_t();
-			Voxels.LoadPositions( Positions, RandomColours, VoxelCenterPosition );
+			Voxels.LoadPositions( Positions, RandomColours, VoxelCenterPosition, 0.4 );
 			this.VoxelBuffers.push(Voxels);
 		}
 		
@@ -619,7 +618,7 @@ class Game_t
 			const VoxContents = await Pop.FileSystem.LoadFileAsArrayBufferAsync(`Models/Taxi.vox`);
 			const Geometry = await ParseMagicaVox( VoxContents );
 			let Voxels = new VoxelBuffer_t();
-			Voxels.LoadPositions( Geometry.Positions, Geometry.Colours, VoxelCenterPosition );
+			Voxels.LoadPositions( Geometry.Positions, Geometry.Colours, VoxelCenterPosition, 0.0 );
 			this.VoxelBuffers.push(Voxels);
 		}
 			
