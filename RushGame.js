@@ -44,20 +44,42 @@ async function CreateBlitTriangleBuffer(RenderContext)
 
 let BlitCopyShader;
 let BlitUpdatePositions;
+let BlitUpdateVelocitys;
 
-function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,TempTexture)
+function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,VelocitysTexture,TempTexture)
 {
 	const Commands = [];
 	
 	const BlitGeo = AssetManager.GetAsset('BlitQuad',RenderContext);
-
+	const State = {};
+	State.BlendMode = 'Blit';
+	
+	//	copy old velocities to temp texture
+	{
+		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
+		const Uniforms = {};
+		Uniforms.SourceTexture = VelocitysTexture;
+		Commands.push(['SetRenderTarget',TempTexture]);
+		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
+	}
+	
+	//	update velocitys texture
+	{
+		const UpdateVelocitysShader = AssetManager.GetAsset(BlitUpdateVelocitys,RenderContext);
+		const Uniforms = {};
+		Uniforms.OldVelocitysTexture = TempTexture;
+		Uniforms.PositionsTexture = PositionTexture;
+		Commands.push(['SetRenderTarget',VelocitysTexture]);
+		Commands.push(['Draw',BlitGeo,UpdateVelocitysShader,Uniforms,State]);
+	}
+	
 	//	copy old positions to temp texture
 	{
 		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
 		const Uniforms = {};
 		Uniforms.SourceTexture = PositionTexture;
 		Commands.push(['SetRenderTarget',TempTexture]);
-		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms]);
+		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
 	}
 	
 	//	update positions texture
@@ -65,8 +87,9 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Te
 		const UpdatePositionsShader = AssetManager.GetAsset(BlitUpdatePositions,RenderContext);
 		const Uniforms = {};
 		Uniforms.OldPositionsTexture = TempTexture;
+		Uniforms.VelocitysTexture = VelocitysTexture;
 		Commands.push(['SetRenderTarget',PositionTexture]);
-		Commands.push(['Draw',BlitGeo,UpdatePositionsShader,Uniforms]);
+		Commands.push(['Draw',BlitGeo,UpdatePositionsShader,Uniforms,State]);
 	}
 	
 	return Commands;
@@ -401,10 +424,18 @@ class Game_t
 	{
 		if ( !this.PhysicsPositions )
 		{
-			function GetPositon4(n,Index)
+			function GetPositon4(xxx,Index)
 			{
 				let xyz = GetCubePositionN(CubePosition,Index);
 				return [...xyz,1];
+			}
+			
+			function GetInitialVelocity4(xxx,Index)
+			{
+				let x = Math.random()-0.5;
+				let y = Math.random()-0.5;
+				let z = Math.random()-0.5;
+				return [x,y,z,0];
 			}
 			
 			let w = PopMath.GetNextPowerOf2(Math.floor( Math.sqrt(CubeCount) ));
@@ -427,9 +458,15 @@ class Game_t
 			//	create the temp texture (todo: should be using a pool)
 			this.PhysicsPositionsTempTexture = new Pop.Image();
 			this.PhysicsPositionsTempTexture.WritePixels( w, h, Float4s, 'Float4' );
+			
+			let Velocity4s = new Array(w*h).fill(0).map(GetInitialVelocity4);
+			Velocity4s = new Float32Array(Velocity4s.flat(2));
+			this.PhysicsVelocitys = new Pop.Image();
+			this.PhysicsVelocitys.WritePixels( w, h, Velocity4s, 'Float4' );
+			
 		}
 		
-		return GetRenderCommandsUpdatePhysicsTextures( RenderContext, this.PhysicsPositions, this.PhysicsPositionsTempTexture );
+		return GetRenderCommandsUpdatePhysicsTextures( RenderContext, this.PhysicsPositions, this.PhysicsVelocitys, this.PhysicsPositionsTempTexture );
 	}
 	
 	//	gr: this should really return commands?
@@ -479,6 +516,7 @@ export default class App_t
 		const VertBlitQuadFilename = 'BlitQuad.vert.glsl';
 		BlitCopyShader = AssetManager.RegisterShaderAssetFilename('BlitCopy.frag.glsl',VertBlitQuadFilename);
 		BlitUpdatePositions = AssetManager.RegisterShaderAssetFilename('BlitUpdatePositions.frag.glsl',VertBlitQuadFilename);
+		BlitUpdateVelocitys = AssetManager.RegisterShaderAssetFilename('BlitUpdateVelocitys.frag.glsl',VertBlitQuadFilename);
 	}
 	
 	BindXrControls(Device)
