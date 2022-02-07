@@ -18,7 +18,7 @@ async function CreateUnitCubeTriangleBuffer(RenderContext)
 
 
 
-const CubeCount = 32*32;
+const CubeCount = 128*128;
 function GetCubePositionN(xyz,Index)
 {
 	const Div = Math.floor(Math.cbrt(CubeCount));
@@ -348,8 +348,9 @@ class Game_t
 				let xyz = GetCubePositionN(CubePosition,Index);
 				return [...xyz,1];
 			}
-			let w = 32;
-			let h = 32;
+			
+			let w = PopMath.GetNextPowerOf2(Math.floor( Math.sqrt(CubeCount) ));
+			let h = w;//	this could reduce until w*h < cubecount
 			let Float4s = new Array(w*h).fill(0).map(GetPositon4);
 			Float4s = new Float32Array(Float4s.flat(2));
 			this.PhysicsPositions = new Pop.Image();
@@ -363,7 +364,7 @@ class Game_t
 					this.PhysicsPositionsUvs.push(uv);
 				}
 			}
-			//this.PhysicsPositionsUvs = this.PhysicsPositionsUvs.flat(2);
+			this.PhysicsPositionsUvs = this.PhysicsPositionsUvs.slice(0,CubeCount);
 		}
 		return [];
 	}
