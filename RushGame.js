@@ -8,7 +8,7 @@ import {Dot3,lerp,LengthSq3} from './PopEngine/Math.js'
 import * as PopMath from './PopEngine/Math.js'
 import Pop from './PopEngine/PopEngine.js'
 
-async function CreateUnitCubeTriangleBuffer(RenderContext)
+async function CreateCubeTriangleBuffer(RenderContext)
 {
 	const Geometry = CreateCubeGeometry(-CubeSize,CubeSize);
 	const TriangleIndexes = undefined;
@@ -46,13 +46,15 @@ let BlitCopyShader;
 let BlitUpdatePositions;
 let BlitUpdateVelocitys;
 
-function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,VelocitysTexture,TempTexture)
+function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,VelocitysTexture,TempTexture,Projectiles)
 {
 	const Commands = [];
 	
 	const BlitGeo = AssetManager.GetAsset('BlitQuad',RenderContext);
 	const State = {};
 	State.BlendMode = 'Blit';
+	
+	let TexelSize = [1.0 / PositionTexture.GetWidth(),1.0 / PositionTexture.GetHeight()];
 	
 	//	copy old velocities to temp texture
 	{
@@ -62,17 +64,61 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Ve
 		Commands.push(['SetRenderTarget',TempTexture]);
 		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
 	}
-	
+
 	//	update velocitys texture
 	{
+		//	get projectile data
+		//	todo: sort to significant projectiles within bounds
+		function CompareProjectiles(a,b)
+		{
+			//	temp use nearest to 0,0,0 (use spawn time?)
+			let Distancea = PopMath.Length3(a.Position);
+			let Distanceb = PopMath.Length3(b.Position);
+			if ( Distancea < Distanceb )	return -1;
+			if ( Distancea > Distanceb )	return 1;
+			return 0;
+		}
+		const UsefulProjectiles = Projectiles.slice().sort(CompareProjectiles);
+		
+		function GetProjectilePos(xxx,Index)
+		{
+			if ( Index >= UsefulProjectiles.length )
+				return [0,0,0,0];
+			const Projectile = UsefulProjectiles[Index];
+			return [...Projectile.Position,1];
+		}
+		function GetProjectilePrevPos(xxx,Index)
+		{
+			if ( Index >= UsefulProjectiles.length )
+				return [0,0,0,0];
+			const Projectile = UsefulProjectiles[Index];
+			return [...Projectile.PrevPosition,1];
+		}
+		const MAX_PROJECTILES = 100;
+		let ProjectilePrevPos = new Array(MAX_PROJECTILES).fill(0).map( GetProjectilePrevPos );
+		let ProjectileNextPos = new Array(MAX_PROJECTILES).fill(0).map( GetProjectilePos );
+	
 		const UpdateVelocitysShader = AssetManager.GetAsset(BlitUpdateVelocitys,RenderContext);
 		const Uniforms = {};
 		Uniforms.OldVelocitysTexture = TempTexture;
 		Uniforms.PositionsTexture = PositionTexture;
+		Uniforms.ProjectilePrevPos = ProjectilePrevPos;
+		Uniforms.ProjectileNextPos = ProjectileNextPos;
+		Uniforms.TexelSize = TexelSize;
+		Uniforms.CubeSize = CubeSize;
 		Commands.push(['SetRenderTarget',VelocitysTexture]);
 		Commands.push(['Draw',BlitGeo,UpdateVelocitysShader,Uniforms,State]);
 	}
-	
+	/*
+	//	test- copy old positions to new - this is causing a glitch in position (resolition?)
+	{
+		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
+		const Uniforms = {};
+		Uniforms.SourceTexture = TempTexture;
+		Commands.push(['SetRenderTarget',PositionTexture]);
+		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
+	}
+	*/
 	//	copy old positions to temp texture
 	{
 		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
@@ -81,13 +127,14 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Ve
 		Commands.push(['SetRenderTarget',TempTexture]);
 		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
 	}
-	
+
 	//	update positions texture
 	{
 		const UpdatePositionsShader = AssetManager.GetAsset(BlitUpdatePositions,RenderContext);
 		const Uniforms = {};
 		Uniforms.OldPositionsTexture = TempTexture;
 		Uniforms.VelocitysTexture = VelocitysTexture;
+		Uniforms.TexelSize = TexelSize;
 		Commands.push(['SetRenderTarget',PositionTexture]);
 		Commands.push(['Draw',BlitGeo,UpdatePositionsShader,Uniforms,State]);
 	}
@@ -99,7 +146,7 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Ve
 
 
 
-const CubeCount = 128*128;
+const CubeCount = 64*64;
 function GetCubePositionN(xyz,Index)
 {
 	const Div = Math.floor(Math.cbrt(CubeCount));
@@ -107,12 +154,14 @@ function GetCubePositionN(xyz,Index)
 	let y = Math.floor( (Index % (Div*Div)) / Div );
 	let z = Math.floor( Index / (Div*Div) );
 
+	let Spacing = 3.0;
+
 	x -= Div/2;
 	y -= Div/2;
 	z -= Div/2;
-	x *= CubeSize*2.5;
-	y *= CubeSize*2.5;
-	z *= CubeSize*2.5;
+	x *= CubeSize*Spacing;
+	y *= CubeSize*Spacing;
+	z *= CubeSize*Spacing;
 	x += xyz[0];
 	y += xyz[1];
 	z += xyz[2];
@@ -122,6 +171,8 @@ function GetCubePositionN(xyz,Index)
 	x += (Math.random() - 0.5) * RandomSize;
 	y += (Math.random() - 0.5) * RandomSize;
 	z += (Math.random() - 0.5) * RandomSize;
+	
+	//return [(Index*0.06)-0.001,0.03,0];
 	
 	return [x,y,z];
 }
@@ -134,6 +185,8 @@ function GetCubeLocalToWorldN(xyz,Index)
 
 function GetColourN(xyz,Index)
 {
+	if ( Index == 0 )
+		return [0,1,0];
 	return GetRandomColour();
 	const r = lerp( 0.4, 0.9, Math.random() );
 	const b = lerp( 0.4, 0.9, Math.random() );
@@ -147,10 +200,10 @@ let CubePhysicsShader = null;
 let AppCamera = new Camera_t();
 //	try and emulate default XR pose a bit
 AppCamera.Position = [0,0,0];
-AppCamera.LookAt = [0,0,-1];
+AppCamera.LookAt = [0,1,-3];
 let DefaultDepthTexture = CreateRandomImage(16,16);
 let CubePosition = AppCamera.LookAt.slice();
-let CubeSize = 0.02;
+let CubeSize = 0.025;
 
 
 const LocalToWorldTransforms = new Float32Array( new Array(CubeCount).fill(CubePosition.slice()).map( GetCubeLocalToWorldN ).flat(2) );
@@ -180,7 +233,7 @@ class Weapon_t
 	constructor(LocalOriginOffset=[0,0,0])
 	{
 		this.LastFireTimeMs = null;		//	null button is up
-		this.FireRepeatPerSec = 10;
+		this.FireRepeatPerSec = 20;
 		
 		this.LocalForward = [0,0,-1];
 		this.Shape = new VoxelShape_t();
@@ -258,7 +311,7 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms)
 	if ( !CubeTransforms.length )
 		return;
 		
-	const Geo = AssetManager.GetAsset('Cube01',RenderContext);
+	const Geo = AssetManager.GetAsset('Cube',RenderContext);
 	const Shader = AssetManager.GetAsset(CubeShader,RenderContext);
 
 	const Uniforms = Object.assign({},CameraUniforms);
@@ -278,7 +331,7 @@ function RenderPhysicsCubes(PushCommand,RenderContext,CameraUniforms,PositionsTe
 	if ( !PositionsTexture )
 		return;
 		
-	const Geo = AssetManager.GetAsset('Cube01',RenderContext);
+	const Geo = AssetManager.GetAsset('Cube',RenderContext);
 	const Shader = AssetManager.GetAsset(CubePhysicsShader,RenderContext);
 
 	const Uniforms = Object.assign({},CameraUniforms);
@@ -299,9 +352,10 @@ function RenderPhysicsCubes(PushCommand,RenderContext,CameraUniforms,PositionsTe
 
 class Projectile_t
 {
-	constructor(Position,InitialForce,GravityMult=1,Drag=0.1)
+	constructor(Position,InitialForce,GravityMult=1,Drag=0.00001)
 	{
-		this.Position = Position;
+		this.PrevPosition = Position.slice();
+		this.Position = Position.slice();
 		this.Velocity = [0,0,0];
 		this.Drag = Drag;
 		
@@ -327,6 +381,8 @@ class Projectile_t
 		this.Velocity = Add3( this.Velocity, Force );
 	
 		let Delta = Multiply3( this.Velocity, Timestep3 );
+		
+		this.PrevPosition = this.Position.slice();
 		this.Position = Add3( this.Position, Delta );
 	}
 }
@@ -432,10 +488,12 @@ class Game_t
 			
 			function GetInitialVelocity4(xxx,Index)
 			{
+				let Scale = Math.random() * 0.4;
 				let x = Math.random()-0.5;
 				let y = Math.random()-0.5;
 				let z = Math.random()-0.5;
-				return [x,y,z,0];
+				let Gravity = 0;
+				return [x*Scale,y*Scale,z*Scale,Gravity];
 			}
 			
 			let w = PopMath.GetNextPowerOf2(Math.floor( Math.sqrt(CubeCount) ));
@@ -459,14 +517,17 @@ class Game_t
 			this.PhysicsPositionsTempTexture = new Pop.Image();
 			this.PhysicsPositionsTempTexture.WritePixels( w, h, Float4s, 'Float4' );
 			
+			//this.PhysicsPositionsTempTexture.SetLinearFilter(false);
+			//this.PhysicsPositions.SetLinearFilter(false);
+			
 			let Velocity4s = new Array(w*h).fill(0).map(GetInitialVelocity4);
 			Velocity4s = new Float32Array(Velocity4s.flat(2));
 			this.PhysicsVelocitys = new Pop.Image();
 			this.PhysicsVelocitys.WritePixels( w, h, Velocity4s, 'Float4' );
-			
 		}
 		
-		return GetRenderCommandsUpdatePhysicsTextures( RenderContext, this.PhysicsPositions, this.PhysicsVelocitys, this.PhysicsPositionsTempTexture );
+		const Projectiles = this.Projectiles;
+		return GetRenderCommandsUpdatePhysicsTextures( RenderContext, this.PhysicsPositions, this.PhysicsVelocitys, this.PhysicsPositionsTempTexture, Projectiles );
 	}
 	
 	//	gr: this should really return commands?
@@ -503,7 +564,7 @@ export default class App_t
 	{
 		if ( CubeShader )
 			return;
-		AssetManager.RegisterAssetAsyncFetchFunction('Cube01', CreateUnitCubeTriangleBuffer );
+		AssetManager.RegisterAssetAsyncFetchFunction('Cube', CreateCubeTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('BlitQuad', CreateBlitTriangleBuffer );
 
 		const VertFilename = 'Geo.vert.glsl';
