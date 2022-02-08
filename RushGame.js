@@ -108,6 +108,8 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Ve
 		Uniforms.ProjectileNextPos = ProjectileNextPos;
 		Uniforms.TexelSize = TexelSize;
 		Uniforms.CubeSize = CubeSize;
+		Uniforms.Random4 = [Math.random(),Math.random(),Math.random(),Math.random()];
+		
 		Commands.push(['SetRenderTarget',VelocitysTexture]);
 		Commands.push(['Draw',BlitGeo,UpdateVelocitysShader,Uniforms,State]);
 	}

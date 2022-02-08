@@ -16,6 +16,8 @@ uniform float CubeSize;//	radius
 #define ProjectileRadius	(CubeSize*2.0)	//	scale to make it a bit easier to hit stuff
 
 const float Timestep = 1.0/60.0;
+uniform vec3 Random4;
+
 
 float TimeAlongLine3(vec3 Position,vec3 Start,vec3 End)
 {
@@ -39,6 +41,15 @@ vec3 NearestToLine3(vec3 Position,vec3 Start,vec3 End)
 	return Near;
 }
 
+float Sign(float x)
+{
+	return ( x < 0.0 ) ? -1.0 : 1.0;
+}
+
+vec3 Sign3(vec3 xyz)
+{
+	return vec3( Sign(xyz.x), Sign(xyz.y), Sign(xyz.z) );
+}
 
 //	w=hit
 vec4 GetProjectileForce(vec3 Position,vec4 ProjectilePrevPos,vec4 ProjectileNextPos)
@@ -56,7 +67,17 @@ vec4 GetProjectileForce(vec3 Position,vec4 ProjectilePrevPos,vec4 ProjectileNext
 		Hit = 0.0;
 	
 	//	if the delta is 1/60th, the velocity must be 60*?
-	vec3 Force = (ProjectileDelta * 60.0) * 20.0;
+	float ProjectileForce = length(ProjectileDelta) * 60.0;
+	//	normalise delta vector so we can add some randomness
+	ProjectileDelta = normalize(ProjectileDelta);
+	//	make it random mostly in the direction of the existing vector
+	//	subtract some so it could bounce forward
+	float RandomScale = 0.4;
+	vec3 Random = Random4.xyz;// - vec3(0.5,0.5,0.5);
+	ProjectileDelta += -Sign3(ProjectileDelta) * Random * RandomScale;
+	ProjectileDelta = normalize(ProjectileDelta);
+	
+	vec3 Force = (ProjectileDelta * ProjectileForce) * 20.0;
 	
 	//	zero out if not hit
 	Force *= Hit;
