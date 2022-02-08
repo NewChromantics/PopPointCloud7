@@ -68,11 +68,12 @@ vec4 GetProjectileForce(vec3 Position,vec4 ProjectilePrevPos,vec4 ProjectileNext
 	
 	//	if the delta is 1/60th, the velocity must be 60*?
 	float ProjectileForce = length(ProjectileDelta) * 60.0;
+	
 	//	normalise delta vector so we can add some randomness
 	ProjectileDelta = normalize(ProjectileDelta);
 	//	make it random mostly in the direction of the existing vector
 	//	subtract some so it could bounce forward
-	float RandomScale = 0.4;
+	float RandomScale = 0.7;
 	vec3 Random = Random4.xyz;// - vec3(0.5,0.5,0.5);
 	ProjectileDelta += -Sign3(ProjectileDelta) * Random * RandomScale;
 	ProjectileDelta = normalize(ProjectileDelta);
@@ -80,7 +81,10 @@ vec4 GetProjectileForce(vec3 Position,vec4 ProjectilePrevPos,vec4 ProjectileNext
 	vec3 Force = (ProjectileDelta * ProjectileForce) * 20.0;
 	
 	//	zero out if not hit
-	Force *= Hit;
+	//	gr: if force is Nan this stays nan
+	if ( Hit == 0.0 )
+		Force = vec3(0,0,0);
+	//Force *= Hit;
 	
 	return vec4( Force, Hit );
 }
