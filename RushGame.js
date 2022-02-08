@@ -204,6 +204,8 @@ class VoxelBuffer_t
 			}
 		}
 		this.PositionsTextureUvs = this.PositionsTextureUvs.slice(0,Positions.length);
+		this.PositionsTextureUvs = this.PositionsTextureUvs.flat(2);
+		this.PositionsTextureUvs = new Float32Array(this.PositionsTextureUvs);
 			
 		//	create the temp texture (todo: should be using a pool)
 		this.TempTexture = new Pop.Image();
@@ -214,16 +216,10 @@ class VoxelBuffer_t
 		this.VelocitysTexture = new Pop.Image();
 		this.VelocitysTexture.WritePixels( w, h, Velocity4s, 'Float4' );
 		
-		function TweakColour(rgba)
-		{
-			let ToneChange = (Math.random()-0.5)*0.10;
-			rgba[0] += ToneChange;
-			rgba[1] += ToneChange;
-			rgba[2] += ToneChange;
-			return rgba;
-		}
 		//	instancing buffer
-		this.Colours = new Float32Array(Colours.map(TweakColour).flat(2));
+		if ( Colours.flat )
+			Colours = Colours.flat(2);
+		this.Colours = new Float32Array(Colours);
 	}
 }
 
@@ -284,7 +280,7 @@ let CubeShader = null;
 let CubePhysicsShader = null;
 let AppCamera = new Camera_t();
 //	try and emulate default XR pose a bit
-AppCamera.Position = [0,0,0];
+AppCamera.Position = [0,1,0];
 AppCamera.LookAt = [0,1,-2];
 AppCamera.FovVertical = 80;
 let DefaultDepthTexture = CreateRandomImage(16,16);
@@ -293,7 +289,7 @@ let CubeSize = 0.02;
 
 
 const LocalToWorldTransforms = new Float32Array( new Array(CubeCount).fill(0).map( GetCubeLocalToWorldN ).flat(2) );
-const RandomColours = new Array(CubeCount).fill(0).map( GetColourN );
+const RandomColours = new Array(CubeCount).fill(0).map( GetColourN ).flat(2);
 
 
 class VoxelShape_t
@@ -617,7 +613,9 @@ class Game_t
 		//	generate voxel enemies
 		this.VoxelBuffers = [];
 		
-		if ( true )
+		const LoadTaxi = false;//Pop.GetExeArguments().Taxi;
+		
+		if ( !LoadTaxi )
 		{
 			let Positions = new Array(CubeCount).fill(0).map(GetCubePositionN);
 			let Voxels = new VoxelBuffer_t();
@@ -625,11 +623,22 @@ class Game_t
 			this.VoxelBuffers.push(Voxels);
 		}
 		
-		if ( false )
+		if ( LoadTaxi )
 		{
 			const VoxContents = await Pop.FileSystem.LoadFileAsArrayBufferAsync(`Models/Taxi.vox`);
 			const Geometry = await ParseMagicaVox( VoxContents );
 			let Voxels = new VoxelBuffer_t();
+				
+			function TweakColour(rgba)
+			{
+				let ToneChange = (Math.random()-0.5)*0.10;
+				rgba[0] += ToneChange;
+				rgba[1] += ToneChange;
+				rgba[2] += ToneChange;
+				return rgba;
+			}
+			Geometry.Colours = new Float32Array(Geometry.Colours.map(TweakColour).flat(2));
+			
 			Voxels.LoadPositions( Geometry.Positions, Geometry.Colours, VoxelCenterPosition, 0.0 );
 			this.VoxelBuffers.push(Voxels);
 		}
