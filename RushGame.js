@@ -57,6 +57,18 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Ve
 	State.BlendMode = 'Blit';
 	
 	let TexelSize = [1.0 / PositionTexture.GetWidth(),1.0 / PositionTexture.GetHeight()];
+
+	//	test- copy old positions to new - this is causing a glitch in position (resolition?)
+	if ( false )
+	{
+		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
+		const Uniforms = {};
+		Uniforms.SourceTexture = TempTexture;
+		Commands.push(['SetRenderTarget',PositionTexture]);
+		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
+		return Commands;
+	}
+
 	
 	//	copy old velocities to temp texture
 	{
@@ -113,16 +125,7 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Ve
 		Commands.push(['SetRenderTarget',VelocitysTexture]);
 		Commands.push(['Draw',BlitGeo,UpdateVelocitysShader,Uniforms,State]);
 	}
-	/*
-	//	test- copy old positions to new - this is causing a glitch in position (resolition?)
-	{
-		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
-		const Uniforms = {};
-		Uniforms.SourceTexture = TempTexture;
-		Commands.push(['SetRenderTarget',PositionTexture]);
-		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
-	}
-	*/
+
 	//	copy old positions to temp texture
 	{
 		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
@@ -280,8 +283,8 @@ let CubeShader = null;
 let CubePhysicsShader = null;
 let AppCamera = new Camera_t();
 //	try and emulate default XR pose a bit
-AppCamera.Position = [0,1,0];
-AppCamera.LookAt = [0,1,-2];
+AppCamera.Position = [0,1.5,0];
+AppCamera.LookAt = [2,2,-5];
 AppCamera.FovVertical = 80;
 let DefaultDepthTexture = CreateRandomImage(16,16);
 let VoxelCenterPosition = AppCamera.LookAt.slice();
@@ -517,7 +520,7 @@ class Game_t
 	
 	OnFireWeapon(Weapon)
 	{
-		const MetresPerSec = 10;
+		const MetresPerSec = 15;
 		this.CreateProjectile( Weapon.GetFirePosition(), Weapon.Forward, MetresPerSec );
 		Weapon.LastFireTimeMs = Pop.GetTimeNowMs();
 	}
@@ -613,7 +616,7 @@ class Game_t
 		//	generate voxel enemies
 		this.VoxelBuffers = [];
 		
-		const LoadTaxi = false;//Pop.GetExeArguments().Taxi;
+		const LoadTaxi = true;//Pop.GetExeArguments().Taxi;
 		
 		if ( !LoadTaxi )
 		{
