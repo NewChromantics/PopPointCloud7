@@ -17,7 +17,7 @@ uniform float CubeSize;//	radius
 #define ProjectileRadius	(CubeSize*7.0)	//	scale to make it a bit easier to hit stuff
 
 const float Timestep = 1.0/60.0;
-uniform vec3 Random4;
+uniform vec4 Random4;
 const float FloorY = 0.0;
 
 float TimeAlongLine3(vec3 Position,vec3 Start,vec3 End)
@@ -52,6 +52,15 @@ vec3 Sign3(vec3 xyz)
 	return vec3( Sign(xyz.x), Sign(xyz.y), Sign(xyz.z) );
 }
 
+//	from https://www.shadertoy.com/view/4djSRW
+//  1 out, 2 in...
+float hash12(vec2 p)
+{
+	vec3 p3  = fract(vec3(p.xyx) * .1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
+}
+
 //	w=hit
 vec4 GetProjectileForce(vec3 Position,vec4 ProjectilePrevPos,vec4 ProjectileNextPos)
 {
@@ -75,7 +84,10 @@ vec4 GetProjectileForce(vec3 Position,vec4 ProjectilePrevPos,vec4 ProjectileNext
 	//	make it random mostly in the direction of the existing vector
 	//	subtract some so it could bounce forward
 	float RandomScale = 0.9;
-	vec3 Random = Random4.xyz;// - vec3(0.5,0.5,0.5);
+	vec3 Random = Random4.xyz;
+	//	random is same every frame, so try and modify with uv which is more unique
+	Random *= hash12(Uv);
+	
 	ProjectileDelta += -Sign3(ProjectileDelta) * Random * RandomScale;
 	ProjectileDelta = normalize(ProjectileDelta);
 	
