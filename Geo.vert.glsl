@@ -1,8 +1,8 @@
 attribute vec3 LocalPosition;
 attribute vec3 LocalUv;
-varying float3 FragWorldPosition;
-varying float3 FragLocalPosition;
-varying float2 FragLocalUv;
+varying vec3 FragWorldPosition;
+varying vec3 FragLocalPosition;
+varying vec2 FragLocalUv;
 varying vec3 FragCameraPosition;	//	position in camera space
 varying vec2 FragViewUv;
 varying vec3 ClipPosition;

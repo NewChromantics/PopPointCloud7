@@ -11,6 +11,7 @@ uniform mat4 ProjectionToCameraTransform;
 
 varying vec3 FragWorldPosition;
 varying vec2 FragLocalUv;
+varying vec3 FragLocalPosition;
 varying vec2 FragViewUv;
 varying vec3 ClipPosition;
 
