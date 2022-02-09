@@ -42,6 +42,10 @@ vec3 GetWorldPos()
 	//	"lerp" between depending on whether we're at front or back
 	//	^^ this is why we're getting angled shapes, even if we did a cut off we
 	//	could have 1/8 verts in front
+	
+	//	gr; this nvidia object space motion blur stretches if the [current]normal 
+	//		is inline(dot(next-prev,velocity)>0) with the motion vector(velocity)... in EYESPACE
+	//	https://www.nvidia.com/docs/io/8230/gdc2003_openglshadertricks.pdf
 	float Scale = dot( normalize(LocalPosInWorld), normalize(-TailDelta) );
 	float Lerp = Scale > 0.0 ? 1.0 : 0.0;
 	

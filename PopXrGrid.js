@@ -85,6 +85,8 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 		catch(e)
 		{
 			console.error(`GpuTick Exception; ${e}`);
+			//	slow down for any shader errors
+			await Pop.Yield(100);
 		}
 	
 		//	can't yield if we're doing gpu ticks

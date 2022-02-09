@@ -487,6 +487,7 @@ class Game_t
 		this.Weapons = {};	//	named weapons for different inputs
 		this.Projectiles = [];
 		this.WorldBoundsSphere = [0,0,0,20];
+		this.WorldBoundsFloorY = 0;
 	}
 	
 	GetWeapons()
@@ -568,6 +569,8 @@ class Game_t
 	{
 		function ProjectileInsideBounds(Projectile)
 		{
+			if ( Projectile.Position[1] < this.WorldBoundsFloorY )
+				return false;
 			let Distance = PopMath.Distance3(Projectile.Position,this.WorldBoundsSphere);
 			return Distance <= this.WorldBoundsSphere[3]; 
 		}
