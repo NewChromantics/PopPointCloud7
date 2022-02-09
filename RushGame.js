@@ -284,10 +284,10 @@ let CubePhysicsShader = null;
 let AppCamera = new Camera_t();
 //	try and emulate default XR pose a bit
 AppCamera.Position = [0,1.5,0];
-AppCamera.LookAt = [2,2,-5];
+AppCamera.LookAt = [0,1.5,-1];
 AppCamera.FovVertical = 80;
 let DefaultDepthTexture = CreateRandomImage(16,16);
-let VoxelCenterPosition = AppCamera.LookAt.slice();
+let VoxelCenterPosition = [0,0,AppCamera.LookAt[2]];//AppCamera.LookAt.slice();
 let CubeSize = 0.02;
 
 
@@ -647,7 +647,16 @@ class Game_t
 			const VoxContents = await Pop.FileSystem.LoadFileAsArrayBufferAsync(`Models/Taxi.vox`);
 			const Geometry = await ParseMagicaVox( VoxContents );
 			let Voxels = new VoxelBuffer_t();
+			
+			function TweakPosition(xyz)
+			{
+				let Scale = [CubeSize*2,CubeSize*2,CubeSize*2];
 				
+				xyz = Multiply3( xyz, Scale );
+				xyz = Add3( xyz, VoxelCenterPosition );
+				return xyz;
+			}
+			
 			function TweakColour(rgba)
 			{
 				let ToneChange = (Math.random()-0.5)*0.10;
@@ -657,6 +666,7 @@ class Game_t
 				return rgba;
 			}
 			Geometry.Colours = new Float32Array(Geometry.Colours.map(TweakColour).flat(2));
+			Geometry.Positions = Geometry.Positions.map(TweakPosition);
 			
 			Voxels.LoadPositions( Geometry.Positions, Geometry.Colours, VoxelCenterPosition, 0.0 );
 			this.VoxelBuffers.push(Voxels);
