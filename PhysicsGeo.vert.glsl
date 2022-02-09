@@ -15,6 +15,7 @@ attribute vec2 PhysicsPositionUv;
 //const vec2 PhysicsPositionUv = vec2(0,0);
 uniform sampler2D PhysicsPositionsTexture;
 uniform vec2 PhysicsPositionsTextureSize;
+uniform sampler2D PhysicsVelocitysTexture;
 
 uniform mat4 WorldToCameraTransform;
 uniform mat4 CameraProjectionTransform;
@@ -34,11 +35,34 @@ mat4 GetLocalToWorldTransform()
 	return Transform;
 }
 
+#define WorldVelocity	GetWorldVelocity()
+vec3 GetWorldVelocity()
+{
+	vec4 Velocity4 = texture2D( PhysicsVelocitysTexture, PhysicsPositionUv );
+	return Velocity4.xyz;
+}
+
+vec4 StretchWorldPosWithVelocity(vec4 WorldPos)
+{
+	float3 LocalPos = LocalPosition;
+	WorldPos.xyz /= WorldPos.www;
+	WorldPos.w = 1.0;
+	
+	//	stretch world pos along velocity
+	vec3 VelocityDelta = -WorldVelocity * 1.5;
+	//	stretch one axis of the local mesh
+	//	todo: maybe we should stretch in local space...
+	//		move velocity into local space, then change mesh
+	WorldPos.xyz += VelocityDelta * LocalPos.z;
+	return WorldPos;
+}
+
 void main()
 {
 	float3 LocalPos = LocalPosition;
 	
 	float4 WorldPos = LocalToWorldTransform * float4(LocalPos,1);
+	WorldPos = StretchWorldPosWithVelocity(WorldPos);
 	float4 CameraPos = WorldToCameraTransform * WorldPos;	//	world to camera space
 	float4 ProjectionPos = CameraProjectionTransform * CameraPos;
 

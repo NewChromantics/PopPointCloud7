@@ -394,7 +394,7 @@ class Weapon_t
 }
 
 
-function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms)
+function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,CubeVelocitys)
 {
 	if ( !CubeTransforms.length )
 		return;
@@ -404,6 +404,7 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms)
 
 	const Uniforms = Object.assign({},CameraUniforms);
 	Uniforms.LocalToWorldTransform = CubeTransforms;
+	Uniforms.WorldVelocity = CubeVelocitys;
 	Uniforms.Colour = RandomColours.slice( 0, CubeTransforms.length*4 );
 
 	const State = {};
@@ -427,10 +428,12 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 	Uniforms.Colour = VoxelsBuffer.Colours;
 
 	let PositionsTexture = VoxelsBuffer.PositionsTexture;
+	let VelocitysTexture = VoxelsBuffer.VelocitysTexture;
 
 	Uniforms.PhysicsPositionsTexture = PositionsTexture;
 	Uniforms.PhysicsPositionsTextureSize = [PositionsTexture.GetWidth(),PositionsTexture.GetHeight()];
 	Uniforms.PhysicsPositionUv = VoxelsBuffer.PositionsTextureUvs;
+	Uniforms.PhysicsVelocitysTexture = VelocitysTexture;
 	
 	const State = {};
 	State.BlendMode = 'Blit';
@@ -510,6 +513,16 @@ class Game_t
 		}
 		const Transforms = this.Projectiles.map( ProjectileToLocalToWorld );
 		return Transforms;
+	}
+	
+	GetProjectileVelocitys()
+	{
+		function ProjectileToVelocity(Projectile)
+		{
+			return Projectile.Velocity;
+		}
+		const Velocitys = this.Projectiles.map( ProjectileToVelocity );
+		return Velocitys;
 	}
 	
 	CreateProjectile(Position,Forward,Force)
@@ -814,12 +827,14 @@ export default class App_t
 		for ( let Weapon of this.Game.GetWeapons() )
 		{
 			const Positions = Weapon.GetRenderLocalToWorldTransforms();
-			RenderCubes( PushCommand, RenderContext, CameraUniforms, Positions );
+			const Velocitys = new Array(Positions.length).fill([0,0,0]);
+			RenderCubes( PushCommand, RenderContext, CameraUniforms, Positions, Velocitys );
 		}
 		
 		{
 			const Positions = this.Game.GetProjectileLocalToWorldTransforms();
-			RenderCubes( PushCommand, RenderContext, CameraUniforms, Positions );
+			const Velocitys = this.Game.GetProjectileVelocitys();
+			RenderCubes( PushCommand, RenderContext, CameraUniforms, Positions, Velocitys );
 		}
 		
 

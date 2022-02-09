@@ -13,7 +13,7 @@ const float GravityY = -6.0;
 uniform vec4 ProjectilePrevPos[MAX_PROJECTILES];
 uniform vec4 ProjectileNextPos[MAX_PROJECTILES];
 uniform float CubeSize;//	radius
-#define ProjectileRadius	(CubeSize*2.0)	//	scale to make it a bit easier to hit stuff
+#define ProjectileRadius	(CubeSize*7.0)	//	scale to make it a bit easier to hit stuff
 
 const float Timestep = 1.0/60.0;
 uniform vec3 Random4;
@@ -73,7 +73,7 @@ vec4 GetProjectileForce(vec3 Position,vec4 ProjectilePrevPos,vec4 ProjectileNext
 	ProjectileDelta = normalize(ProjectileDelta);
 	//	make it random mostly in the direction of the existing vector
 	//	subtract some so it could bounce forward
-	float RandomScale = 0.7;
+	float RandomScale = 1.1;
 	vec3 Random = Random4.xyz;// - vec3(0.5,0.5,0.5);
 	ProjectileDelta += -Sign3(ProjectileDelta) * Random * RandomScale;
 	ProjectileDelta = normalize(ProjectileDelta);
