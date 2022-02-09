@@ -452,7 +452,7 @@ class Projectile_t
 		this.Velocity = [0,0,0];
 		this.Drag = Drag;
 		
-		let GravityPerSec = -6 * GravityMult;
+		let GravityPerSec = -8 * GravityMult;
 		this.GravityForce = [0,GravityPerSec,0];
 		this.PendingForce = InitialForce;
 	}
@@ -486,7 +486,7 @@ class Game_t
 	{
 		this.Weapons = {};	//	named weapons for different inputs
 		this.Projectiles = [];
-		this.WorldBoundsSphere = [0,0,0,20];
+		this.WorldBoundsSphere = [0,0,0,50];
 		this.WorldBoundsFloorY = 0;
 	}
 	
@@ -534,7 +534,7 @@ class Game_t
 	
 	OnFireWeapon(Weapon)
 	{
-		const MetresPerSec = 15;
+		const MetresPerSec = 20;
 		this.CreateProjectile( Weapon.GetFirePosition(), Weapon.Forward, MetresPerSec );
 		Weapon.LastFireTimeMs = Pop.GetTimeNowMs();
 	}
@@ -648,8 +648,12 @@ class Game_t
 			const Geometry = await ParseMagicaVox( VoxContents );
 			let Voxels = new VoxelBuffer_t();
 			
-			function TweakPosition(xyz)
+			const SkipEveryX = 4;
+			
+			function TweakPosition(xyz,Index)
 			{
+				if ( Index % SkipEveryX == 0 )
+					return null;
 				let Scale = [CubeSize*2,CubeSize*2,CubeSize*2];
 				
 				xyz = Multiply3( xyz, Scale );
@@ -657,16 +661,20 @@ class Game_t
 				return xyz;
 			}
 			
-			function TweakColour(rgba)
+			function TweakColour(rgba,Index)
 			{
+				if ( Index % SkipEveryX == 0 )
+					return null;
 				let ToneChange = (Math.random()-0.5)*0.10;
 				rgba[0] += ToneChange;
 				rgba[1] += ToneChange;
 				rgba[2] += ToneChange;
 				return rgba;
 			}
-			Geometry.Colours = new Float32Array(Geometry.Colours.map(TweakColour).flat(2));
-			Geometry.Positions = Geometry.Positions.map(TweakPosition);
+			Geometry.Colours = Geometry.Colours.map(TweakColour).filter( x=>x != null );
+			Geometry.Positions = Geometry.Positions.map(TweakPosition).filter( x=>x != null );
+			
+			Geometry.Colours = new Float32Array(Geometry.Colours.flat(2));
 			
 			Voxels.LoadPositions( Geometry.Positions, Geometry.Colours, VoxelCenterPosition, 0.0 );
 			this.VoxelBuffers.push(Voxels);
