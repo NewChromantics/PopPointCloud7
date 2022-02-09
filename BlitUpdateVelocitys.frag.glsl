@@ -6,8 +6,9 @@ uniform vec2 TexelSize;
 #define SampleUv	Uv//( Uv + TexelSize * 0.5 )
 
 const float AirDrag = 0.001;
-const float FloorDrag = 0.7;
-const float GravityY = -6.0;
+const float FloorDragMin = 0.3;	//	less = more bounce
+const float FloorDragMax = 0.7;	//	less = more bounce
+const float GravityY = -8.0;
 
 #define MAX_PROJECTILES	100
 //	projectile should probably be oldpos newpos to get force, pos, and not miss a fast projectile
@@ -19,6 +20,7 @@ uniform float CubeSize;//	radius
 const float Timestep = 1.0/60.0;
 uniform vec4 Random4;
 const float FloorY = 0.0;
+#define NearFloorY	(FloorY+0.02)
 
 float TimeAlongLine3(vec3 Position,vec3 Start,vec3 End)
 {
@@ -91,6 +93,10 @@ vec4 GetProjectileForce(vec3 Position,vec4 ProjectilePrevPos,vec4 ProjectileNext
 	ProjectileDelta += -Sign3(ProjectileDelta) * Random * RandomScale;
 	ProjectileDelta = normalize(ProjectileDelta);
 	
+	//	if the voxel is "on the floor", lets do a little hack to make sure it goes upward not down
+	if ( Position.y >= NearFloorY )
+		ProjectileDelta.y = abs(ProjectileDelta.y);
+	
 	vec3 Force = (ProjectileDelta * ProjectileForce) * 20.0;
 	
 	//	zero out if not hit
@@ -117,7 +123,7 @@ vec4 GetFloorBounceForce(vec3 Position,vec3 Velocity)
 	//	but the force we add is multiplied by timestep (maybe it shouldnt be)
 	//	so for a true reflection, multiply by inverse timestep
 	Bounce *= 1.0/Timestep;
-	Bounce *= 1.0 - FloorDrag;
+	Bounce *= 1.0 - mix(FloorDragMin,FloorDragMax,Random4.x);
 	return vec4(Bounce,1.0);
 }
 
@@ -155,7 +161,7 @@ void main()
 			GravityForce = vec3(0,0,0);
 			//GravityMult = 0.0;
 			Force += FloorForce.xyz;
-			//Position.y = FloorY;
+			Position.y = FloorY;
 			Velocity = vec4(0,0,0,0);
 		}
 	}
