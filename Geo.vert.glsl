@@ -15,32 +15,46 @@ uniform mat4 WorldToCameraTransform;
 uniform mat4 CameraProjectionTransform;
 attribute vec4 Colour;
 
-
-vec4 StretchWorldPosWithVelocity(vec4 WorldPos)
+vec3 GetWorldPos()
 {
-	float3 LocalPos = LocalPosition;
+	vec4 WorldPos = LocalToWorldTransform * vec4(LocalPosition,1.0);
 	WorldPos.xyz /= WorldPos.www;
 	WorldPos.w = 1.0;
+
+	vec4 OriginWorldPos = LocalToWorldTransform * vec4(0,0,0,1);
+	OriginWorldPos.xyz /= OriginWorldPos.www;
+	OriginWorldPos.w = 1.0;	
 	
 	//	stretch world pos along velocity
-	vec3 VelocityDelta = -WorldVelocity * 1.5;
-	//	stretch one axis of the local mesh
-	//	todo: maybe we should stretch in local space...
-	//		move velocity into local space, then change mesh
-	WorldPos.xyz += VelocityDelta * LocalPos.z;
-	return WorldPos;
+	vec3 TailDelta = -WorldVelocity * 4.0 * (1.0/60.0);
+	
+	//	old method
+	//WorldPos.xyz += -WorldVelocity * 1.5 * LocalPosition.z;
+	//return WorldPos.xyz;
+	
+	vec3 LocalPosInWorld = WorldPos.xyz - OriginWorldPos.xyz;
+	
+	//	this is the opposite of what it should be and shows the future
+	//	but better than flashes of past that wasnt there (better if we just stored prev pos)
+	vec3 NextPos = WorldPos.xyz - (TailDelta*0.9);
+	vec3 PrevPos = WorldPos.xyz + (TailDelta*0.1);
+	
+	//	"lerp" between depending on whether we're at front or back
+	//	^^ this is why we're getting angled shapes, even if we did a cut off we
+	//	could have 1/8 verts in front
+	float Scale = dot( normalize(LocalPosInWorld), normalize(-TailDelta) );
+	float Lerp = Scale > 0.0 ? 1.0 : 0.0;
+	
+	WorldPos.xyz = mix( PrevPos, NextPos, Lerp );
+	return WorldPos.xyz;
 }
 
 
 void main()
 {
-	float3 LocalPos = LocalPosition;
-	
-	float4 WorldPos = LocalToWorldTransform * float4(LocalPos,1);
-	WorldPos = StretchWorldPosWithVelocity(WorldPos);
-	
-	float4 CameraPos = WorldToCameraTransform * WorldPos;	//	world to camera space
-	float4 ProjectionPos = CameraProjectionTransform * CameraPos;
+	vec3 WorldPos = GetWorldPos();
+	vec4 CameraPos = WorldToCameraTransform * vec4(WorldPos,1.0);	//	world to camera space
+	vec4 ProjectionPos = CameraProjectionTransform * CameraPos;
 
 	gl_Position = ProjectionPos;
 	
