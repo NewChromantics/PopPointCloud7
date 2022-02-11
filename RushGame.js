@@ -1,14 +1,41 @@
 import Camera_t from './PopEngine/Camera.js'
 import AssetManager from './PopEngine/AssetManager.js'
 import {CreateCubeGeometry} from './PopEngine/CommonGeometry.js'
-import {CreateTranslationMatrix,Add3,Subtract3,Multiply3} from './PopEngine/Math.js'
+import {CreateTranslationMatrix,Add3,Multiply3,Dot3,lerp,LengthSq3,Normalise3,Subtract3} from './PopEngine/Math.js'
 import {CreateRandomImage} from './PopEngine/Images.js'
 import {GetRandomColour} from './PopEngine/Colour.js'
-import {Dot3,lerp,LengthSq3} from './PopEngine/Math.js'
 import * as PopMath from './PopEngine/Math.js'
 import Pop from './PopEngine/PopEngine.js'
 
 import ParseMagicaVox from './PopEngine/MagicaVox.js'
+
+
+
+function GetStraightnessOfPoints(Positions)
+{
+	let Directions = [];
+	for ( let i=1;	i<Positions.length;	i++ )
+	{
+		const Prev = Positions[i-1];
+		const Next = Positions[i-0];
+		const Direction = Normalise3(Subtract3(Prev,Next));
+		Directions.push(Direction);
+	}
+	let Dots = [];
+	for ( let i=1;	i<Directions.length;	i++ )
+	{
+		const Prev = Directions[i-1];
+		const Next = Directions[i-0];
+		const Dot = Dot3(Prev,Next);
+		Dots.push(Dot);
+	}
+	
+	let TotalDot = 1;
+	//	mult, or average?
+	for ( let Dot of Dots )
+		TotalDot *= Dot;
+	return TotalDot;
+}
 
 async function CreateCubeTriangleBuffer(RenderContext)
 {
@@ -302,7 +329,7 @@ class VoxelShape_t
 		this.Positions = [];
 		this.AddPosition([0,0,0]);
 		
-		let Length = 0.3;
+		let Length = 0.2;
 		for ( let z=0;	z<Length;	z+=CubeSize*2 )
 			this.AddPosition([0,0,-z]);
 		this.Length = Length;
@@ -727,17 +754,34 @@ export default class App_t
 	BindXrControls(Device)
 	{
 		const Game = this.Game;
-		Device.OnMouseMove = function(xyz,Button,InputName,Transform)
+		Device.OnMouseMove = function(xyz,Button,InputName,Transform,ExtraData)
 		{
 			//	false when not tracking
-			if ( Transform )
+			if ( !Transform )
+				return;
+
+			const Weapon = Game.GetWeapon(InputName);
+			let Rotation = Transform.matrix;
+			PopMath.SetMatrixTranslation(Rotation,0,0,0,1);
+		
+			Weapon.SetPosition(xyz,Rotation);
+
+			//	if this is a hand, it has extra positions;
+			//	if the finger is outstretched, treat it as a button press
+			if ( ExtraData && ExtraData.Positions )
 			{
 				const Weapon = Game.GetWeapon(InputName);
-				let Rotation = Transform.matrix;
-				PopMath.SetMatrixTranslation(Rotation,0,0,0,1);
-		
-				Weapon.SetPosition(xyz,Rotation);
+				const Straightness = GetStraightnessOfPoints(ExtraData.Positions);
+				if ( Straightness > 0.9 )
+				{
+					Game.OnFireWeapon(Weapon);
+				}
+				else
+				{
+					Weapon.ReleaseFire();
+				}
 			}
+
 		}
 		
 		Device.OnMouseDown = function(xyz,Button,InputName,Transform)
