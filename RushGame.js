@@ -341,12 +341,18 @@ class VoxelShape_t
 	}
 }
 
-class Weapon_t
+class WeaponWreckingBall_t
+{
+}
+
+class WeaponGun_t
 {
 	constructor(LocalOriginOffset=[0,0,0])
 	{
 		this.LastFireTimeMs = null;		//	null button is up
 		this.FireRepeatPerSec = 20;
+		
+		this.Projectiles = [];
 		
 		this.LocalForward = [0,0,-1];
 		this.Shape = new VoxelShape_t();
@@ -445,6 +451,51 @@ class Weapon_t
 		let LocalTransforms = LocalPositions.map( TransformLocalPos.bind(this) );
 		return LocalTransforms;
 	}
+	
+	CreateProjectile()
+	{
+		const ForceMetresPerSec = 20;
+		const Position = this.GetFirePosition();
+		const Forward = this.Forward;
+		
+		const Velocity = Multiply3( Forward, [ForceMetresPerSec,ForceMetresPerSec,ForceMetresPerSec] );
+		this.Projectiles.push( new Projectile_t(Position, Velocity) );
+	}
+	
+	EnumProjectiles(EnumProjectile)
+	{
+		this.Projectiles.forEach(EnumProjectile);
+	}
+	
+	Fire()
+	{
+		this.CreateProjectile();
+		this.LastFireTimeMs = Pop.GetTimeNowMs();
+	}
+	
+	Tick(TimestepSecs,PositionInsideBounds)
+	{
+		this.RepeatFire();
+
+		this.Projectiles.forEach( p => p.Move(TimestepSecs) );
+
+		//	cull projectiles
+		function ProjectileInsideBounds(Projectile)
+		{
+			return PositionInsideBounds(Projectile.Position);
+		}
+		this.Projectiles = this.Projectiles.filter(ProjectileInsideBounds.bind(this));
+	}
+	
+	RepeatFire()
+	{	
+		//	repeat fire 
+		if ( this.LastFireTimeMs === null )
+			return;
+		const Elapsed = Pop.GetTimeNowMs() - this.LastFireTimeMs;
+		if ( Elapsed > this.FireRepeatAfterMs )
+			this.Fire();
+	}
 }
 
 
@@ -511,6 +562,12 @@ class Projectile_t
 		this.PendingForce = InitialForce;
 	}
 	
+	get LocalToWorldTransform()
+	{
+		const LocalToWorld = PopMath.CreateTranslationMatrix( ...this.Position );
+		return LocalToWorld;
+	}
+	
 	Move(TimestepSecs)
 	{
 		const Timestep3 = [TimestepSecs,TimestepSecs,TimestepSecs];
@@ -554,30 +611,18 @@ class Game_t
 		if ( !this.Weapons[Name] )
 		{
 			const Offset = (Name=='Desktop') ? [0,-0.15,0.3] : [0,0,0];
-			this.Weapons[Name] = new Weapon_t(Offset);
+			this.Weapons[Name] = new WeaponGun_t(Offset);
 		}
 		return this.Weapons[Name];
 	}
 	
-	GetProjectileLocalToWorldTransforms()
+	EnumProjectiles(EnumProjectile)
 	{
-		function ProjectileToLocalToWorld(Projectile)
+		this.Projectiles.forEach( EnumProjectile );
+		for ( let Weapon of Object.values(this.Weapons) )
 		{
-			const LocalToWorld = PopMath.CreateTranslationMatrix( ...Projectile.Position );
-			return LocalToWorld;
+			Weapon.EnumProjectiles(EnumProjectile);
 		}
-		const Transforms = this.Projectiles.map( ProjectileToLocalToWorld );
-		return Transforms;
-	}
-	
-	GetProjectileVelocitys()
-	{
-		function ProjectileToVelocity(Projectile)
-		{
-			return Projectile.Velocity;
-		}
-		const Velocitys = this.Projectiles.map( ProjectileToVelocity );
-		return Velocitys;
 	}
 	
 	CreateProjectile(Position,Forward,Force)
@@ -588,15 +633,13 @@ class Game_t
 	
 	OnFireWeapon(Weapon)
 	{
-		const MetresPerSec = 20;
-		this.CreateProjectile( Weapon.GetFirePosition(), Weapon.Forward, MetresPerSec );
-		Weapon.LastFireTimeMs = Pop.GetTimeNowMs();
+		Weapon.Fire();
 	}
 		
 	OnDesktopFireDown()
 	{
 		const Weapon = this.GetWeapon('Desktop');
-		this.OnFireWeapon(Weapon);
+		Weapon.Fire();
 	}
 	
 	OnDesktopFireUp()
@@ -619,35 +662,39 @@ class Game_t
 		Weapon.SetPosition( Position, Rotation );
 	}
 	
+	PositionInsideBounds(Position)
+	{
+		if ( Position[1] < this.WorldBoundsFloorY )
+			return false;
+		let Distance = PopMath.Distance3(Position,this.WorldBoundsSphere);
+		return Distance <= this.WorldBoundsSphere[3]; 
+	}
+	
 	Tick(TimestepSecs)
 	{
+		for ( let Projectile of this.Projectiles )
+		{
+			Projectile.Move(TimestepSecs);
+		}
+
 		function ProjectileInsideBounds(Projectile)
 		{
-			if ( Projectile.Position[1] < this.WorldBoundsFloorY )
-				return false;
-			let Distance = PopMath.Distance3(Projectile.Position,this.WorldBoundsSphere);
-			return Distance <= this.WorldBoundsSphere[3]; 
+			return this.PositionInsideBounds(Projectile.Position);
 		}
 		//	cull old projectiles
 		this.Projectiles = this.Projectiles.filter(ProjectileInsideBounds.bind(this));
-	
+
 		//	repeat fire weapons
-		function RepeatFireWeapon(Weapon)
-		{
-			if ( Weapon.LastFireTimeMs === null )
-				return;
-			const Elapsed = Pop.GetTimeNowMs() - Weapon.LastFireTimeMs;
-			if ( Elapsed > Weapon.FireRepeatAfterMs )
-				this.OnFireWeapon(Weapon);
-		}
 		const Weapons = this.GetWeapons();
-		Weapons.forEach( RepeatFireWeapon.bind(this) );
+		Weapons.forEach( w => w.Tick(TimestepSecs,this.PositionInsideBounds.bind(this)) );
 	}
 	
 	
 	GetPhysicsRenderCommands(RenderContext,TimestepSecs)
 	{
-		const Projectiles = this.Projectiles;
+		const Projectiles = [];
+		this.EnumProjectiles( p => Projectiles.push(p) );
+		
 		const Commands = [];
 		for ( let VoxelBuffer of this.VoxelBuffers )
 		{
@@ -661,11 +708,6 @@ class Game_t
 	//		depends if we need to read it back...
 	async GpuTick(RenderContext,TimestepSecs)
 	{
-		for ( let Projectile of this.Projectiles )
-		{
-			Projectile.Move(TimestepSecs);
-		}
-
 		//	generate rendercommands then run them
 		const Commands = this.GetPhysicsRenderCommands(RenderContext,TimestepSecs);
 		//	also... dont need to wait if we're not reading stuff back
@@ -933,9 +975,15 @@ export default class App_t
 		}
 		
 		{
-			const Positions = this.Game.GetProjectileLocalToWorldTransforms();
-			const Velocitys = this.Game.GetProjectileVelocitys();
-			RenderCubes( PushCommand, RenderContext, CameraUniforms, Positions, Velocitys );
+			let Transforms = [];
+			let Velocitys = [];
+			function OnProjectile(Projectile)
+			{
+				Transforms.push( Projectile.LocalToWorldTransform );
+				Velocitys.push( Projectile.Velocity );
+			}
+			this.Game.EnumProjectiles(OnProjectile);
+			RenderCubes( PushCommand, RenderContext, CameraUniforms, Transforms, Velocitys );
 		}
 		
 
