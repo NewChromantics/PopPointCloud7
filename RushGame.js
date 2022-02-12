@@ -350,6 +350,7 @@ class Weapon_t
 		
 		this.LocalForward = [0,0,-1];
 		this.Shape = new VoxelShape_t();
+		this.LocalToWorldTransforms = null;	//	if set, we use explicit positions instead of shape
 		this.Position = [0,0,0];
 		this.Rotation = [1,0,0,0,	0,1,0,0,	0,0,1,0,	0,0,0,1];
 		this.LocalOriginOffset = LocalOriginOffset;
@@ -379,10 +380,23 @@ class Weapon_t
 	{
 		LocalOffset = Add3( LocalOffset, this.LocalOriginOffset );
 		
-		let WorldTrans = PopMath.CreateTranslationMatrix( ...this.Position );
+		let Transforms = [];
 		let LocalTrans = PopMath.CreateTranslationMatrix( ...LocalOffset );
+		Transforms.push(LocalTrans);
 		
-		let LocalToWorld = PopMath.MatrixMultiply4x4Multiple( LocalTrans, this.Rotation, WorldTrans );
+		//	position is pos+rot
+		if ( this.Position.length == 4*4 )
+		{
+			Transforms.push(this.Position);
+		}
+		else
+		{
+			let WorldTrans = PopMath.CreateTranslationMatrix( ...this.Position );
+			Transforms.push(this.Rotation);
+			Transforms.push(WorldTrans);
+		}
+		
+		let LocalToWorld = PopMath.MatrixMultiply4x4Multiple( ...Transforms );
 		
 		return LocalToWorld;
 	}
@@ -407,8 +421,21 @@ class Weapon_t
 			this.Rotation = Rotation.slice();
 	}
 	
+	SetRenderLocalToWorldTransforms(Transforms)
+	{
+		this.Position = Transforms[0];
+		this.Rotation = null;
+		
+		//	if we ever need to do something a bit more complex, put
+		//	these into local space & into the .Shape
+		this.LocalToWorldTransforms = Transforms;
+	}
+	
 	GetRenderLocalToWorldTransforms()
 	{
+		if ( this.LocalToWorldTransforms )
+			return this.LocalToWorldTransforms;
+
 		function TransformLocalPos(LocalPosition)
 		{
 			let LocalToWorld = this.GetLocalToWorldTransform(LocalPosition);
@@ -766,13 +793,22 @@ export default class App_t
 		
 			Weapon.SetPosition(xyz,Rotation);
 
+			//	if hand, use all the points
+			if ( ExtraData.LocalToWorlds )
+			{
+				Weapon.SetRenderLocalToWorldTransforms( ExtraData.LocalToWorlds );
+			}
+
 			//	if this is a hand, it has extra positions;
 			//	if the finger is outstretched, treat it as a button press
-			if ( ExtraData && ExtraData.Positions )
+			//	dont fire from thumb
+			const IsThumb = InputName.includes('thumb');
+			if ( ExtraData && ExtraData.LocalToWorlds && !IsThumb )
 			{
 				const Weapon = Game.GetWeapon(InputName);
-				const Straightness = GetStraightnessOfPoints(ExtraData.Positions);
-				if ( Straightness > 0.9 )
+				const Positions = ExtraData.LocalToWorlds.map( PopMath.GetMatrixTranslation );
+				const Straightness = GetStraightnessOfPoints(Positions);
+				if ( Straightness > 0.85 )
 				{
 					Game.OnFireWeapon(Weapon);
 				}
