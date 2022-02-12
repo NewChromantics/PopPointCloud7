@@ -821,7 +821,9 @@ class Game_t
 		if ( !this.Weapons[Name] )
 		{
 			const Offset = (Name=='Desktop') ? [0,-0.15,0.3] : [0,0,0];
-			this.Weapons[Name] = new WeaponWreckingProjection_t(Offset);
+			console.log(`Creating weapon ${Name}`);
+			const WeaponType = Name.startsWith('left') ? WeaponWreckingProjection_t : WeaponGun_t;
+			this.Weapons[Name] = new WeaponType(Offset);
 		}
 		return this.Weapons[Name];
 	}
