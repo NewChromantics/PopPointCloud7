@@ -6,8 +6,8 @@ uniform vec2 TexelSize;
 #define SampleUv	Uv//( Uv + TexelSize * 0.5 )
 
 const float AirDrag = 0.001;
-const float FloorDragMin = 0.3;	//	less = more bounce
-const float FloorDragMax = 0.7;	//	less = more bounce
+const float FloorDragMin = 0.4;	//	less = more bounce
+const float FloorDragMax = 0.8;	//	less = more bounce
 const float GravityY = -8.0;
 
 #define MAX_PROJECTILES	100
