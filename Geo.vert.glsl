@@ -26,7 +26,7 @@ vec3 GetWorldPos()
 	OriginWorldPos.w = 1.0;	
 	
 	//	stretch world pos along velocity
-	vec3 TailDelta = -WorldVelocity * 4.0 * (1.0/60.0);
+	vec3 TailDelta = -WorldVelocity * 2.0 * (1.0/60.0);
 	
 	//	old method
 	//WorldPos.xyz += -WorldVelocity * 1.5 * LocalPosition.z;
