@@ -1050,11 +1050,11 @@ export default class App_t
 			Weapon.SetPosition(xyz,Rotation);
 
 			//	if hand, use all the points
-			if ( ExtraData.LocalToWorlds )
+			if ( ExtraData && ExtraData.LocalToWorlds )
 			{
 				Weapon.SetRenderLocalToWorldTransforms( ExtraData.LocalToWorlds );
 			}
-			if ( ExtraData.InputOriginLocalToWorld )
+			if ( ExtraData && ExtraData.InputOriginLocalToWorld )
 			{
 				Weapon.SetOriginLocalToWorld(ExtraData.InputOriginLocalToWorld);
 			}
