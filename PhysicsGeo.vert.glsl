@@ -13,6 +13,9 @@ varying vec4 FragColour;
 //attribute mat4 LocalToWorldTransform;
 attribute vec2 PhysicsPositionUv;
 //const vec2 PhysicsPositionUv = vec2(0,0);
+
+//	gr: we have a problem here... the previous position is often very close
+//		and if not moving at all they disapear
 const bool UsePreviousPositionsTexture = true;
 uniform sampler2D PhysicsPreviousPositionsTexture;
 uniform sampler2D PhysicsPositionsTexture;
@@ -65,14 +68,15 @@ vec3 GetWorldPos()
 	
 	//	this is the opposite of what it should be and shows the future
 	//	but better than flashes of past that wasnt there (better if we just stored prev pos)
-	float ForwardWeight = UsePreviousPositionsTexture ? 0.0 : 0.9;
+	float ForwardWeight = UsePreviousPositionsTexture ? 0.9 : 0.9;
 	float BackwarddWeight = UsePreviousPositionsTexture ? 0.0 : 0.1;
-	vec3 NextPos = WorldPos.xyz - (TailDelta*UsePreviousPositionsTexture);
-	vec3 PrevPos = WorldPos.xyz + (TailDelta*UsePreviousPositionsTexture);
+	vec3 NextPos = WorldPos.xyz - (TailDelta*ForwardWeight);
+	vec3 PrevPos = WorldPos.xyz + (TailDelta*BackwarddWeight);
 	
 	if ( UsePreviousPositionsTexture )
 	{
 		PrevPos.xyz = texture2D( PhysicsPreviousPositionsTexture, PhysicsPositionUv ).xyz;
+		PrevPos.xyz += LocalPosition;
 	}
 	
 	//	"lerp" between depending on whether we're at front or back
