@@ -956,11 +956,11 @@ class Game_t
 			const Geometry = await ParseMagicaVox( VoxContents );
 			let Voxels = new VoxelBuffer_t();
 			
-			const SkipEveryX = 4;
+			const SkipEveryX = 0;
 			
 			function TweakPosition(xyz,Index)
 			{
-				if ( Index % SkipEveryX == 0 )
+				if ( SkipEveryX!=0 && Index % SkipEveryX == 0 )
 					return null;
 				let Scale = [CubeSize*2,CubeSize*2,CubeSize*2];
 				
@@ -971,7 +971,7 @@ class Game_t
 			
 			function TweakColour(rgba,Index)
 			{
-				if ( Index % SkipEveryX == 0 )
+				if ( SkipEveryX!=0 && Index % SkipEveryX == 0 )
 					return null;
 				let ToneChange = (Math.random()-0.5)*0.10;
 				rgba[0] += ToneChange;
