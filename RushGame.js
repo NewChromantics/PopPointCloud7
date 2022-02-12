@@ -347,6 +347,33 @@ class Weapon_t
 	Tick(TimestepSecs,PositionInsideBounds)
 	{
 	}
+	
+	//	world space forward
+	get Forward()
+	{
+		return this.GetWorldForward();
+	}
+	
+	GetWorldForward(Length=1,LocalToWorld=null)
+	{
+		//	should use GetFirePosition()?
+		if ( !LocalToWorld )
+			LocalToWorld = this.GetLocalToWorldTransform();
+			
+		let LocalForward = this.LocalForward;
+		let LocalOrigin = [0,0,0];
+		LocalForward = PopMath.TransformPosition( LocalForward, LocalToWorld  );
+		LocalOrigin = PopMath.TransformPosition( LocalOrigin, LocalToWorld  );
+		let WorldForward = Subtract3( LocalForward, LocalOrigin );
+		WorldForward = PopMath.Normalise3( WorldForward, Length );
+		return WorldForward;
+	}
+	
+	SetOriginLocalToWorld(LocalToWorld)
+	{
+		//	this is the wrist on hands
+		this.OriginLocalToWorld = LocalToWorld;
+	}
 }
 
 class WeaponWreckingProjection_t extends Weapon_t
@@ -363,8 +390,14 @@ class WeaponWreckingProjection_t extends Weapon_t
 		this.LocalOriginOffset = LocalOriginOffset;
 		
 		//	display this hand at this distance
-		this.ProjectedTranslation = [0,0,3];
-		this.ProjectedScale = [3,3,3];
+		this.ProjectedDistance = 15.0;
+		this.ProjectedScale = 15.0;
+		
+		//	we save the previous ones to reduce alloc, but also to 
+		//	calculate velocity (prev pos -> pos);
+		this.ProjectileCaches = [];	
+		
+		this.OriginLocalToWorld = PopMath.CreateIdentityMatrix();
 	}
 	
 	Fire()
@@ -390,6 +423,40 @@ class WeaponWreckingProjection_t extends Weapon_t
 		//	if we ever need to do something a bit more complex, put
 		//	these into local space & into the .Shape
 		this.LocalToWorldTransforms = Transforms;
+		
+		//	this might want to move if the positions update faster than ticks
+		this.UpdateProjectiles();
+	}
+	
+	UpdateProjectiles()
+	{
+		const ProjectileVelocityStretch = 30;
+		function PositionToProjectile(Transform,Index)
+		{
+			let IsNew = false;
+			if ( !this.ProjectileCaches[Index] )
+			{
+				const NewProjectile = new Projectile_t();
+				this.ProjectileCaches[Index] = NewProjectile;
+				IsNew = true;
+			}
+			
+			const Projectile = this.ProjectileCaches[Index];
+			Projectile.PrevPosition = Projectile.Position.slice();
+			Projectile.LocalToWorld = Transform;
+			Projectile.Position = PopMath.GetMatrixTranslation(Projectile.LocalToWorldTransform);
+			if ( IsNew )
+				Projectile.PrevPosition = Projectile.Position.slice();
+			
+			Projectile.Velocity = PopMath.Subtract3( Projectile.Position, Projectile.PrevPosition );
+			Projectile.Velocity = PopMath.Multiply3( Projectile.Velocity, [ProjectileVelocityStretch,ProjectileVelocityStretch,ProjectileVelocityStretch] );
+			return Projectile;
+		}
+		
+		//	generate live projectiles
+		const ProjectedPositions = this.GetProjectedLocalToWorlds();
+		const Projectiles = ProjectedPositions.map(PositionToProjectile.bind(this));
+		//Projectiles.forEach( EnumProjectile );
 	}
 	
 	GetLocalToWorldTransform(LocalOffset=[0,0,0])
@@ -435,11 +502,42 @@ class WeaponWreckingProjection_t extends Weapon_t
 	//	these form the "projectile" projection positons
 	GetProjectedLocalToWorlds()
 	{
+		const WorldToInputOriginSpace = PopMath.MatrixInverse4x4( this.OriginLocalToWorld );
+		
+		//	make the extension scale with distance from face
+		let Face = [0,1.5,0];
+		let InputCenter = PopMath.GetMatrixTranslation(this.OriginLocalToWorld);
+		let FaceDistance = PopMath.Distance3(Face,InputCenter);
+		FaceDistance *= FaceDistance;
+		
+		let ProjectedDistance = FaceDistance * this.ProjectedDistance;
+		let ProjectedScale = FaceDistance * this.ProjectedScale;
+		//let ProjectedScale = 
+		
 		function ProjectLocalToWorld(LocalToWorld)
 		{
 			//	local space transform, so it should move & scale before being attached to its normal pos
-			const ProjectLocal = PopMath.CreateTranslationScaleMatrix( this.ProjectedTranslation, this.ProjectedScale );
-			const NewLocalToWorld = PopMath.MatrixMultiply4x4Multiple( ProjectLocal, LocalToWorld );
+			const ProjectLocalScale = PopMath.CreateScaleMatrix( ProjectedScale,ProjectedScale,ProjectedScale );
+			/*
+			
+			//	extend in local space or the blocks will be squashed together
+			//	if we project here, we're projecting in joint-space, so don't want to
+			//const ProjectLocalTrans = PopMath.CreateTranslationMatrix( 0,0,-this.ProjectedScale*0.4 );
+			const ProjectLocalTrans = PopMath.CreateTranslationMatrix( 0,0,0.4 );
+			
+			const ProjectWorldTrans = PopMath.CreateTranslationMatrix( ...WorldOffset );
+			//const NewLocalToWorld = PopMath.MatrixMultiply4x4Multiple( ProjectLocalScale, ProjectLocalTrans, LocalToWorld, ProjectWorldTrans );
+			const NewLocalToWorld = PopMath.MatrixMultiply4x4Multiple( LocalToWorld, WorldToInputOriginSpace, ProjectLocalScale, ProjectLocalTrans, LocalToWorld, ProjectWorldTrans );
+			return NewLocalToWorld;
+			*/
+			const ProjectLocalTrans = PopMath.CreateTranslationMatrix( 0,0,-ProjectedDistance );
+			//	probbaly should be linked to scale and cube size?
+			//	gr: this wont extend it just moves relative to wrist? though i think it should be rotated at that point...
+			//const Extend = this.ProjectedScale * CubeSize * 10;
+			//const ProjectLocalExtend = PopMath.CreateTranslationMatrix( 0,0,-Extend );
+			const ProjectLocalExtend = PopMath.CreateTranslationMatrix( 0,0,0 );
+			
+			const NewLocalToWorld = PopMath.MatrixMultiply4x4Multiple( LocalToWorld, WorldToInputOriginSpace, ProjectLocalExtend, ProjectLocalScale, ProjectLocalTrans, this.OriginLocalToWorld );
 			return NewLocalToWorld;
 		}
 		
@@ -450,23 +548,12 @@ class WeaponWreckingProjection_t extends Weapon_t
 	
 	EnumProjectiles(EnumProjectile)
 	{
-		function PositionToProjectile(Transform)
-		{
-			const Projectile = new Projectile_t();
-			Projectile.LocalToWorld = Transform;
-			Projectile.Position = PopMath.GetMatrixTranslation(Projectile.LocalToWorldTransform);
-			Projectile.PrevPosition = Projectile.Position.slice();
-			return Projectile;
-		}
-		
-		//	generate live projectiles
-		const ProjectedPositions = this.GetProjectedLocalToWorlds();
-		const Projectiles = ProjectedPositions.map(PositionToProjectile);
-		Projectiles.forEach( EnumProjectile );
+		this.ProjectileCaches.forEach(EnumProjectile);
 	}
 	
 	Tick(TimestepSecs,PositionInsideBounds)
 	{
+		//	here we should be updating prevpos of projectile
 	}
 }
 
@@ -534,18 +621,6 @@ class WeaponGun_t extends Weapon_t
 		return LocalToWorld;
 	}
 
-	get Forward()
-	{
-		//	should use GetFirePosition()?
-		let LocalToWorld = this.GetLocalToWorldTransform();
-		let LocalForward = this.LocalForward;
-		let LocalOrigin = [0,0,0];
-		LocalForward = PopMath.TransformPosition( LocalForward, LocalToWorld  );
-		LocalOrigin = PopMath.TransformPosition( LocalOrigin, LocalToWorld  );
-		let WorldForward = Subtract3( LocalForward, LocalOrigin );
-		WorldForward = PopMath.Normalise3( WorldForward );
-		return WorldForward;
-	}
 
 	SetPosition(Position,Rotation)
 	{
@@ -971,6 +1046,10 @@ export default class App_t
 			if ( ExtraData.LocalToWorlds )
 			{
 				Weapon.SetRenderLocalToWorldTransforms( ExtraData.LocalToWorlds );
+			}
+			if ( ExtraData.InputOriginLocalToWorld )
+			{
+				Weapon.SetOriginLocalToWorld(ExtraData.InputOriginLocalToWorld);
 			}
 
 			//	if this is a hand, it has extra positions;
