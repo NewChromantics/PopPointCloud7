@@ -341,14 +341,141 @@ class VoxelShape_t
 	}
 }
 
-class WeaponWreckingBall_t
+
+class Weapon_t
 {
+	Tick(TimestepSecs,PositionInsideBounds)
+	{
+	}
 }
 
-class WeaponGun_t
+class WeaponWreckingProjection_t extends Weapon_t
 {
 	constructor(LocalOriginOffset=[0,0,0])
 	{
+		super();
+		this.LocalForward = [0,0,-1];
+		this.Shape = new VoxelShape_t();
+		this.LocalToWorldTransforms = null;	//	if set, we use explicit positions instead of shape
+
+		this.Position = [0,0,0];
+		this.Rotation = [1,0,0,0,	0,1,0,0,	0,0,1,0,	0,0,0,1];
+		this.LocalOriginOffset = LocalOriginOffset;
+		
+		//	display this hand at this distance
+		this.ProjectedTranslation = [0,0,3];
+		this.ProjectedScale = [3,3,3];
+	}
+	
+	Fire()
+	{
+	}
+	
+	ReleaseFire()
+	{
+	}
+	
+	SetPosition(Position,Rotation)
+	{
+		this.Position = Position.slice();
+		if ( Rotation )
+			this.Rotation = Rotation.slice();
+	}
+	
+	SetRenderLocalToWorldTransforms(Transforms)
+	{
+		this.Position = Transforms[0];
+		this.Rotation = null;
+		
+		//	if we ever need to do something a bit more complex, put
+		//	these into local space & into the .Shape
+		this.LocalToWorldTransforms = Transforms;
+	}
+	
+	GetLocalToWorldTransform(LocalOffset=[0,0,0])
+	{
+		LocalOffset = Add3( LocalOffset, this.LocalOriginOffset );
+		
+		let Transforms = [];
+		let LocalTrans = PopMath.CreateTranslationMatrix( ...LocalOffset );
+		Transforms.push(LocalTrans);
+		
+		//	position is pos+rot
+		if ( this.Position.length == 4*4 )
+		{
+			Transforms.push(this.Position);
+		}
+		else
+		{
+			let WorldTrans = PopMath.CreateTranslationMatrix( ...this.Position );
+			Transforms.push(this.Rotation);
+			Transforms.push(WorldTrans);
+		}
+		
+		let LocalToWorld = PopMath.MatrixMultiply4x4Multiple( ...Transforms );
+		
+		return LocalToWorld;
+	}
+	
+	GetRenderLocalToWorldTransforms()
+	{
+		if ( this.LocalToWorldTransforms )
+			return this.LocalToWorldTransforms;
+
+		function TransformLocalPos(LocalPosition)
+		{
+			let LocalToWorld = this.GetLocalToWorldTransform(LocalPosition);
+			return LocalToWorld;
+		}
+		let LocalPositions = this.Shape.Positions;
+		let LocalTransforms = LocalPositions.map( TransformLocalPos.bind(this) );
+		return LocalTransforms;
+	}
+	
+	//	these form the "projectile" projection positons
+	GetProjectedLocalToWorlds()
+	{
+		function ProjectLocalToWorld(LocalToWorld)
+		{
+			//	local space transform, so it should move & scale before being attached to its normal pos
+			const ProjectLocal = PopMath.CreateTranslationScaleMatrix( this.ProjectedTranslation, this.ProjectedScale );
+			const NewLocalToWorld = PopMath.MatrixMultiply4x4Multiple( ProjectLocal, LocalToWorld );
+			return NewLocalToWorld;
+		}
+		
+		const LocalToWorlds = this.GetRenderLocalToWorldTransforms();
+		const ProjectedLocalToWorlds = LocalToWorlds.map(ProjectLocalToWorld.bind(this));
+		return ProjectedLocalToWorlds;
+	}
+	
+	EnumProjectiles(EnumProjectile)
+	{
+		function PositionToProjectile(Transform)
+		{
+			const Projectile = new Projectile_t();
+			Projectile.LocalToWorld = Transform;
+			Projectile.Position = PopMath.GetMatrixTranslation(Projectile.LocalToWorldTransform);
+			Projectile.PrevPosition = Projectile.Position.slice();
+			return Projectile;
+		}
+		
+		//	generate live projectiles
+		const ProjectedPositions = this.GetProjectedLocalToWorlds();
+		const Projectiles = ProjectedPositions.map(PositionToProjectile);
+		Projectiles.forEach( EnumProjectile );
+	}
+	
+	Tick(TimestepSecs,PositionInsideBounds)
+	{
+	}
+}
+
+class WeaponGun_t extends Weapon_t
+{
+	constructor(LocalOriginOffset=[0,0,0])
+	{
+		super();
+
 		this.LastFireTimeMs = null;		//	null button is up
 		this.FireRepeatPerSec = 20;
 		
@@ -550,10 +677,12 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 
 class Projectile_t
 {
-	constructor(Position,InitialForce,GravityMult=1,Drag=0.00001)
+	constructor(Position=[0,0,0],InitialForce=[0,0,0],GravityMult=1,Drag=0.00001)
 	{
 		this.PrevPosition = Position.slice();
 		this.Position = Position.slice();
+		this.LocalToWorld = null;	//	alternative
+		
 		this.Velocity = [0,0,0];
 		this.Drag = Drag;
 		
@@ -564,6 +693,9 @@ class Projectile_t
 	
 	get LocalToWorldTransform()
 	{
+		if ( this.LocalToWorld )
+			return this.LocalToWorld;
+			
 		const LocalToWorld = PopMath.CreateTranslationMatrix( ...this.Position );
 		return LocalToWorld;
 	}
@@ -611,7 +743,7 @@ class Game_t
 		if ( !this.Weapons[Name] )
 		{
 			const Offset = (Name=='Desktop') ? [0,-0.15,0.3] : [0,0,0];
-			this.Weapons[Name] = new WeaponGun_t(Offset);
+			this.Weapons[Name] = new WeaponWreckingProjection_t(Offset);
 		}
 		return this.Weapons[Name];
 	}
