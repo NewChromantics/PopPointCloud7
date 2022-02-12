@@ -430,7 +430,7 @@ class WeaponWreckingProjection_t extends Weapon_t
 	
 	UpdateProjectiles()
 	{
-		const ProjectileVelocityStretch = 30;
+		const ProjectileVelocityStretch = 10;
 		function PositionToProjectile(Transform,Index)
 		{
 			let IsNew = false;
@@ -736,7 +736,10 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 
 	let PositionsTexture = VoxelsBuffer.PositionsTexture;
 	let VelocitysTexture = VoxelsBuffer.VelocitysTexture;
+	//	temp texture happens to have the previous positions
+	let PreviousPositionsTexture = VoxelsBuffer.TempTexture;
 
+	Uniforms.PhysicsPreviousPositionsTexture = PreviousPositionsTexture;
 	Uniforms.PhysicsPositionsTexture = PositionsTexture;
 	Uniforms.PhysicsPositionsTextureSize = [PositionsTexture.GetWidth(),PositionsTexture.GetHeight()];
 	Uniforms.PhysicsPositionUv = VoxelsBuffer.PositionsTextureUvs;

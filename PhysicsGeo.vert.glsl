@@ -13,6 +13,8 @@ varying vec4 FragColour;
 //attribute mat4 LocalToWorldTransform;
 attribute vec2 PhysicsPositionUv;
 //const vec2 PhysicsPositionUv = vec2(0,0);
+const bool UsePreviousPositionsTexture = true;
+uniform sampler2D PhysicsPreviousPositionsTexture;
 uniform sampler2D PhysicsPositionsTexture;
 uniform vec2 PhysicsPositionsTextureSize;
 uniform sampler2D PhysicsVelocitysTexture;
@@ -63,8 +65,15 @@ vec3 GetWorldPos()
 	
 	//	this is the opposite of what it should be and shows the future
 	//	but better than flashes of past that wasnt there (better if we just stored prev pos)
-	vec3 NextPos = WorldPos.xyz - (TailDelta*0.9);
-	vec3 PrevPos = WorldPos.xyz + (TailDelta*0.1);
+	float ForwardWeight = UsePreviousPositionsTexture ? 0.0 : 0.9;
+	float BackwarddWeight = UsePreviousPositionsTexture ? 0.0 : 0.1;
+	vec3 NextPos = WorldPos.xyz - (TailDelta*UsePreviousPositionsTexture);
+	vec3 PrevPos = WorldPos.xyz + (TailDelta*UsePreviousPositionsTexture);
+	
+	if ( UsePreviousPositionsTexture )
+	{
+		PrevPos.xyz = texture2D( PhysicsPreviousPositionsTexture, PhysicsPositionUv ).xyz;
+	}
 	
 	//	"lerp" between depending on whether we're at front or back
 	//	^^ this is why we're getting angled shapes, even if we did a cut off we
