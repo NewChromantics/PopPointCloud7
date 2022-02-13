@@ -1,14 +1,17 @@
 precision highp float;
 varying vec2 Uv;
-uniform sampler2D OldVelocitysTexture;
-uniform sampler2D PositionsTexture;
+uniform sampler2D PreviousVelocitysTexture;
+uniform sampler2D PreviousPositionsTexture;		//	previous positions
+uniform sampler2D PositionsTexture;				//	current positions
+uniform sampler2D ShapePositionsTexture;		//	where we're aiming to be + shape origin
+
 uniform vec2 TexelSize;
 #define SampleUv	Uv//( Uv + TexelSize * 0.5 )
 
-const float AirDrag = 0.001;
+const float AirDrag = 0.04;
 const float FloorDragMin = 0.4;	//	less = more bounce
 const float FloorDragMax = 0.8;	//	less = more bounce
-const float GravityY = -8.0;
+const float GravityY = -16.0;
 
 #define MAX_PROJECTILES	100
 //	projectile should probably be oldpos newpos to get force, pos, and not miss a fast projectile
@@ -17,34 +20,53 @@ uniform vec4 ProjectileNextPos[MAX_PROJECTILES];
 uniform float CubeSize;//	radius
 #define ProjectileRadius	(CubeSize*7.0)	//	scale to make it a bit easier to hit stuff
 
+#define PROJECTILE_HIT_RANDOMNESS	(0.9)
+#define SPRING_FORCE				(10.0)
+#define SPRING_NOISE_FACTOR			(0.1)
+#define PROJECTILE_HIT_FORCE		(10.0)
+
 const float Timestep = 1.0/60.0;
-uniform vec4 Random4;
+uniform vec4 Random4;	//	a random number per frame (not per voxel!)
 const float FloorY = 0.0;
 #define NearFloorY	(FloorY+0.02)
+
+#define mat_identity	mat4(1,0,0,0,	0,1,0,0,	0,0,1,0,	0,0,0,1 )
 
 struct Behaviour_t
 {
 	int		Type;
-	float	Gravity;
+	float	GravityForce;
+	float	SpringForce;
+	float	SpringNoiseFactor;
+	mat4	ShapeLocalToWorldTransform;
 };
 
 //	behaviour types
 #define BEHAVIOUR_STATIC	0
 #define BEHAVIOUR_DEBRIS	1
-Behaviour_t Behaviour_Debris = Behaviour_t( BEHAVIOUR_DEBRIS, GravityY );
-Behaviour_t Behaviour_Static = Behaviour_t( BEHAVIOUR_STATIC, 0.0 );
+#define BEHAVIOUR_SHAPE		2
+Behaviour_t Behaviour_Debris = Behaviour_t( BEHAVIOUR_DEBRIS,	GravityY,	0.0,			0.0,		mat_identity );
+Behaviour_t Behaviour_Static = Behaviour_t( BEHAVIOUR_STATIC,	0.0,		0.0,			0.0,		mat_identity );
+Behaviour_t Behaviour_Shape = Behaviour_t( BEHAVIOUR_SHAPE,		0.0,		SPRING_FORCE,	SPRING_NOISE_FACTOR,	mat_identity );
 
 
 float GetBehaviourTypef(Behaviour_t Behaviour)
 {
-	return float(Behaviour.Type) / 255.0;
+	//return float(Behaviour.Type) / 255.0;
+	return float(Behaviour.Type);
 }
 
 Behaviour_t GetBehaviour(float Typef)
 {
-	int Type = int( Typef * 255.0 );
-	if ( Type == BEHAVIOUR_STATIC )
+	//int Type = int( Typef * 255.0 );
+	int Type = int( Typef );
+	
+	if ( Type == Behaviour_Static.Type )
 		return Behaviour_Static;
+		
+	if ( Type == Behaviour_Shape.Type )
+		return Behaviour_Shape;
+		
 	return Behaviour_Debris;
 }
 
@@ -88,8 +110,16 @@ float hash12(vec2 p)
 	p3 += dot(p3, p3.yzx + 33.33);
 	return fract((p3.x + p3.y) * p3.z);
 }
+vec3 hash31(float p)
+{
+	vec3 p3 = fract(vec3(p) * vec3(.1031, .1030, .0973));
+	p3 += dot(p3, p3.yzx+33.33);
+	return fract((p3.xxy+p3.yzz)*p3.zyx); 
+}
+
 
 //	w=hit
+//	todo: use prevposition + position so we can hit flying objects
 vec4 GetProjectileForce(vec3 Position,vec4 ProjectilePrevPos,vec4 ProjectileNextPos)
 {
 	//	.w = is valid
@@ -111,7 +141,7 @@ vec4 GetProjectileForce(vec3 Position,vec4 ProjectilePrevPos,vec4 ProjectileNext
 	ProjectileDelta = normalize(ProjectileDelta);
 	//	make it random mostly in the direction of the existing vector
 	//	subtract some so it could bounce forward
-	float RandomScale = 0.9;
+	float RandomScale = PROJECTILE_HIT_RANDOMNESS;
 	vec3 Random = Random4.xyz;
 	//	random is same every frame, so try and modify with uv which is more unique
 	Random *= hash12(Uv);
@@ -123,7 +153,7 @@ vec4 GetProjectileForce(vec3 Position,vec4 ProjectilePrevPos,vec4 ProjectileNext
 	if ( Position.y >= NearFloorY )
 		ProjectileDelta.y = abs(ProjectileDelta.y);
 	
-	vec3 Force = (ProjectileDelta * ProjectileForce) * 20.0;
+	vec3 Force = (ProjectileDelta * ProjectileForce) * PROJECTILE_HIT_FORCE;
 	
 	//	zero out if not hit
 	//	gr: if force is Nan this stays nan
@@ -153,12 +183,26 @@ vec4 GetFloorBounceForce(vec3 Position,vec3 Velocity)
 	return vec4(Bounce,1.0);
 }
 
+vec3 GetSpringForce(vec3 Position,float Random,vec3 ShapePosition,Behaviour_t Behaviour)
+{
+	vec3 Spring = ShapePosition - Position;
+	
+	float SpringForce = length(Spring) * Behaviour.SpringForce;
+	
+	//	add some noise to spring's direction
+	vec3 Noise = hash31(Random);
+	Spring = normalize(Spring);
+	Spring += Noise * Behaviour.SpringNoiseFactor;
+	Spring = normalize(Spring) * SpringForce;
+	
+	return Spring;
+}
 
 void main()
 {
-	vec4 Velocity = texture2D( OldVelocitysTexture, SampleUv );
+	vec4 Velocity = texture2D( PreviousVelocitysTexture, SampleUv );
 	vec3 Position = texture2D( PositionsTexture, SampleUv ).xyz;
-	
+
 	//	apply drag
 	vec3 Damping = vec3( 1.0 - AirDrag );
 	Velocity.xyz *= Damping;
@@ -168,8 +212,18 @@ void main()
 	Behaviour_t Behaviour = GetBehaviour( Velocity.w );
 
 	//	accumulate forces
-	vec3 GravityForce = vec3(0,Behaviour.Gravity,0);
+	vec3 GravityForce = vec3(0,Behaviour.GravityForce,0);
 	vec3 Force = vec3(0,0,0);
+
+	//	spring to shape position
+	if ( Behaviour.SpringForce != 0.0 )
+	{
+		vec4 ShapePosition = texture2D( ShapePositionsTexture, SampleUv );
+		float Random = ShapePosition.w;
+		ShapePosition = Behaviour.ShapeLocalToWorldTransform * vec4(ShapePosition.xyz,1.0);
+		vec3 SpringForce = GetSpringForce( Position, Random, ShapePosition.xyz, Behaviour );
+		Force += SpringForce;
+	}
 
 	//	do collisions with projectiles (add to force)
 	//	and enable graivty
@@ -178,11 +232,13 @@ void main()
 		vec4 ProjectileHit = GetProjectileForce( Position, ProjectilePrevPos[p], ProjectileNextPos[p] );
 		Force += ProjectileHit.xyz;
 		if ( ProjectileHit.w > 0.0 )
+		{
 			Behaviour.Type = Behaviour_Debris.Type;
+		}
 	}
 	
 	//	hit with floor
-	//if ( GravityMult > 0.0 )
+	if ( Behaviour.GravityForce != 0.0 )
 	{
 		vec4 FloorForce = GetFloorBounceForce(Position.xyz,Velocity.xyz);
 		//	hit floor

@@ -15,6 +15,7 @@ const ClearColour = [0,0,0];
 
 const BEHAVIOUR_STATIC = 0;
 const BEHAVIOUR_DEBRIS = 1;
+const BEHAVIOUR_SHAPE = 2;
 
 async function CreateCubeTriangleBuffer(RenderContext)
 {
@@ -60,6 +61,7 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projec
 	const PreviousPositionsTexture = VoxelBuffer.PreviousPositionsTexture;
 	const VelocitysTexture = VoxelBuffer.VelocitysTexture;
 	const PreviousVelocitysTexture = VoxelBuffer.PreviousVelocitysTexture;
+	const ShapePositionsTexture = VoxelBuffer.ShapePositionsTexture;
 	
 	const Commands = [];
 	
@@ -113,7 +115,9 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projec
 	
 		const UpdateVelocitysShader = AssetManager.GetAsset(BlitUpdateVelocitys,RenderContext);
 		const Uniforms = {};
-		Uniforms.OldVelocitysTexture = PreviousVelocitysTexture;
+		Uniforms.ShapePositionsTexture = ShapePositionsTexture;
+		Uniforms.PreviousPositionsTexture = PreviousPositionsTexture;
+		Uniforms.PreviousVelocitysTexture = PreviousVelocitysTexture;
 		Uniforms.PositionsTexture = PositionTexture;
 		Uniforms.ProjectilePrevPos = ProjectilePrevPos;
 		Uniforms.ProjectileNextPos = ProjectileNextPos;
@@ -170,13 +174,15 @@ class VoxelBuffer_t
 		//	todo: append to existing positions,
 		//		need to read latest texture (async op)
 		
-		function GetPositon4(xxx,Index)
+		function GetShapePositon4(xxx,Index)
 		{
 			if ( Index >= Positions.length )
 				return [0,0,0,0];
 			let xyz = Positions[Index].slice(0,3);
 			xyz = Add3( xyz, CenterPosition );
-			return [...xyz,1];
+			//	we'll use w as a random value per voxel
+			let Random = Math.random();
+			return [...xyz,Random];
 		}
 
 		function GetInitialVelocity4(xxx,Index)
@@ -189,16 +195,16 @@ class VoxelBuffer_t
 			let x = Math.random()-0.5;
 			let y = Math.random()-0.5;
 			let z = Math.random()-0.5;
-			let BehaviourType = BEHAVIOUR_STATIC;
+			let BehaviourType = BEHAVIOUR_SHAPE;
 			return [x*Scale,y*Scale,z*Scale,BehaviourType];
 		}
 			
 		let w = PopMath.GetNextPowerOf2(Math.floor( Math.sqrt(Positions.length) ));
 		let h = w;//	this could reduce until w*h < cubecount
-		let Float4s = new Array(w*h).fill(0).map(GetPositon4);
-		Float4s = new Float32Array(Float4s.flat(2));
-		this.PositionsTexture = new Pop.Image();
-		this.PositionsTexture.WritePixels( w, h, Float4s, 'Float4' );
+		let ShapePosition4s = new Array(w*h).fill(0).map(GetShapePositon4);
+		ShapePosition4s = new Float32Array(ShapePosition4s.flat(2));
+		this.ShapePositionsTexture = new Pop.Image();
+		this.ShapePositionsTexture.WritePixels( w, h, ShapePosition4s, 'Float4' );
 		
 		//	make this auto generative
 		this.PositionsTextureUvs = [];
@@ -213,12 +219,26 @@ class VoxelBuffer_t
 		this.PositionsTextureUvs = this.PositionsTextureUvs.slice(0,Positions.length);
 		this.PositionsTextureUvs = this.PositionsTextureUvs.flat(2);
 		this.PositionsTextureUvs = new Float32Array(this.PositionsTextureUvs);
-			
+		
+		let InitialPosition4s = ShapePosition4s.slice();
+		const StartAtZero = true;
+		if ( StartAtZero )
+		{
+			function GetInitialPositon4(xxx,Index)
+			{
+				let xyz = [Math.random()+0,0,Math.random()-5];
+				xyz = Add3( xyz, CenterPosition );
+				return [xyz,1];
+			}
+			InitialPosition4s = new Array(w*h).fill(0).map(GetInitialPositon4);
+			InitialPosition4s = new Float32Array(InitialPosition4s.flat(2));
+		}
+		
 		//	instead of a pool, we're setting up for double buffering
 		this.PreviousPositionsTexture = new Pop.Image();
-		this.PreviousPositionsTexture.WritePixels( w, h, Float4s, 'Float4' );
-		this.PreviousPositionsTexture = new Pop.Image();
-		this.PreviousPositionsTexture.WritePixels( w, h, Float4s, 'Float4' );
+		this.PreviousPositionsTexture.WritePixels( w, h, InitialPosition4s, 'Float4' );
+		this.PositionsTexture = new Pop.Image();
+		this.PositionsTexture.WritePixels( w, h, InitialPosition4s, 'Float4' );
 			
 		let Velocity4s = new Array(w*h).fill(0).map(GetInitialVelocity4);
 		Velocity4s = new Float32Array(Velocity4s.flat(2));
