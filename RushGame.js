@@ -13,31 +13,6 @@ import ParseMagicaVox from './PopEngine/MagicaVox.js'
 //	somehow this should be passed from XR api/camera (default clear?)
 const ClearColour = [0,0,0];
 
-function GetStraightnessOfPoints(Positions)
-{
-	let Directions = [];
-	for ( let i=1;	i<Positions.length;	i++ )
-	{
-		const Prev = Positions[i-1];
-		const Next = Positions[i-0];
-		const Direction = Normalise3(Subtract3(Prev,Next));
-		Directions.push(Direction);
-	}
-	let Dots = [];
-	for ( let i=1;	i<Directions.length;	i++ )
-	{
-		const Prev = Directions[i-1];
-		const Next = Directions[i-0];
-		const Dot = Dot3(Prev,Next);
-		Dots.push(Dot);
-	}
-	
-	let TotalDot = 1;
-	//	mult, or average?
-	for ( let Dot of Dots )
-		TotalDot *= Dot;
-	return TotalDot;
-}
 
 async function CreateCubeTriangleBuffer(RenderContext)
 {
@@ -1083,7 +1058,7 @@ export default class App_t
 			{
 				const Weapon = Game.GetWeapon(InputName);
 				const Positions = ExtraData.LocalToWorlds.map( PopMath.GetMatrixTranslation );
-				const Straightness = GetStraightnessOfPoints(Positions);
+				const Straightness = PopMath.GetStraightnessOfPoints(Positions);
 				if ( Straightness > 0.85 )
 				{
 					Game.OnFireWeapon(Weapon);
