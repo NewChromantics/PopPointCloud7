@@ -1,6 +1,6 @@
 import Camera_t from './PopEngine/Camera.js'
 import AssetManager from './PopEngine/AssetManager.js'
-import {CreateCubeGeometry} from './PopEngine/CommonGeometry.js'
+import {CreateCubeGeometry,MergeGeometry} from './PopEngine/CommonGeometry.js'
 import {CreateTranslationMatrix,Add3,Multiply3,Dot3,lerp,LengthSq3,Normalise3,Subtract3} from './PopEngine/Math.js'
 import {CreateRandomImage} from './PopEngine/Images.js'
 import {GetRandomColour} from './PopEngine/Colour.js'
@@ -943,9 +943,11 @@ class Game_t
 		//	generate voxel enemies
 		this.VoxelBuffers = [];
 		
-		const LoadTaxi = true;//Pop.GetExeArguments().Taxi;
+		//const LoadFile = `Models/Taxi.vox`;
+		const LoadFile = `Models/Skeleton.vox`;
+		//const LoadFile = false;
 		
-		if ( !LoadTaxi )
+		if ( !LoadFile )
 		{
 			let Positions = new Array(CubeCount).fill(0).map(GetCubePositionN);
 			let Voxels = new VoxelBuffer_t();
@@ -953,10 +955,23 @@ class Game_t
 			this.VoxelBuffers.push(Voxels);
 		}
 		
-		if ( LoadTaxi )
+		if ( LoadFile )
 		{
-			const VoxContents = await Pop.FileSystem.LoadFileAsArrayBufferAsync(`Models/Taxi.vox`);
-			const Geometry = await ParseMagicaVox( VoxContents );
+			const VoxContents = await Pop.FileSystem.LoadFileAsArrayBufferAsync(LoadFile);
+			
+			const MergedGeometry = {};
+			function OnGeometry(Geometry)
+			{
+				for ( let Attrib in Geometry )
+				{
+					let Data = MergedGeometry[Attrib] || [];
+					Data = Data.concat( Geometry[Attrib] );
+					MergedGeometry[Attrib] = Data;
+				}
+			}
+			await ParseMagicaVox( VoxContents, OnGeometry );
+			const Geometry = MergedGeometry;
+			
 			let Voxels = new VoxelBuffer_t();
 			
 			const SkipEveryX = 0;
