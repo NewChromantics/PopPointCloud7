@@ -22,6 +22,32 @@ uniform vec4 Random4;
 const float FloorY = 0.0;
 #define NearFloorY	(FloorY+0.02)
 
+struct Behaviour_t
+{
+	int		Type;
+	float	Gravity;
+};
+
+//	behaviour types
+#define BEHAVIOUR_STATIC	0
+#define BEHAVIOUR_DEBRIS	1
+Behaviour_t Behaviour_Debris = Behaviour_t( BEHAVIOUR_DEBRIS, GravityY );
+Behaviour_t Behaviour_Static = Behaviour_t( BEHAVIOUR_STATIC, 0.0 );
+
+
+float GetBehaviourTypef(Behaviour_t Behaviour)
+{
+	return float(Behaviour.Type) / 255.0;
+}
+
+Behaviour_t GetBehaviour(float Typef)
+{
+	int Type = int( Typef * 255.0 );
+	if ( Type == BEHAVIOUR_STATIC )
+		return Behaviour_Static;
+	return Behaviour_Debris;
+}
+
 float TimeAlongLine3(vec3 Position,vec3 Start,vec3 End)
 {
 	vec3 Direction = End - Start;
@@ -136,10 +162,13 @@ void main()
 	//	apply drag
 	vec3 Damping = vec3( 1.0 - AirDrag );
 	Velocity.xyz *= Damping;
-	
+
+	//	gr: we could store this type in velocity or position...
+	//		we want to modify it here though, so leave in velocity
+	Behaviour_t Behaviour = GetBehaviour( Velocity.w );
+
 	//	accumulate forces
-	float GravityMult = Velocity.w;
-	vec3 GravityForce = vec3(0,GravityY*GravityMult,0);
+	vec3 GravityForce = vec3(0,Behaviour.Gravity,0);
 	vec3 Force = vec3(0,0,0);
 
 	//	do collisions with projectiles (add to force)
@@ -148,11 +177,12 @@ void main()
 	{
 		vec4 ProjectileHit = GetProjectileForce( Position, ProjectilePrevPos[p], ProjectileNextPos[p] );
 		Force += ProjectileHit.xyz;
-		GravityMult = max( GravityMult, ProjectileHit.w );
+		if ( ProjectileHit.w > 0.0 )
+			Behaviour.Type = Behaviour_Debris.Type;
 	}
 	
 	//	hit with floor
-	if ( GravityMult > 0.0 )
+	//if ( GravityMult > 0.0 )
 	{
 		vec4 FloorForce = GetFloorBounceForce(Position.xyz,Velocity.xyz);
 		//	hit floor
@@ -171,7 +201,7 @@ void main()
 	
 	//	apply forces
 	Velocity.xyz += Force * Timestep;
-	Velocity.w = GravityMult;
+	Velocity.w = GetBehaviourTypef(Behaviour);
 	
 	gl_FragColor = Velocity;
 }

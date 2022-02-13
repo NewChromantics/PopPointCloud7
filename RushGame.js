@@ -13,6 +13,8 @@ import ParseMagicaVox from './PopEngine/MagicaVox.js'
 //	somehow this should be passed from XR api/camera (default clear?)
 const ClearColour = [0,0,0];
 
+const BEHAVIOUR_STATIC = 0;
+const BEHAVIOUR_DEBRIS = 1;
 
 async function CreateCubeTriangleBuffer(RenderContext)
 {
@@ -187,8 +189,8 @@ class VoxelBuffer_t
 			let x = Math.random()-0.5;
 			let y = Math.random()-0.5;
 			let z = Math.random()-0.5;
-			let Gravity = 0;
-			return [x*Scale,y*Scale,z*Scale,Gravity];
+			let BehaviourType = BEHAVIOUR_STATIC;
+			return [x*Scale,y*Scale,z*Scale,BehaviourType];
 		}
 			
 		let w = PopMath.GetNextPowerOf2(Math.floor( Math.sqrt(Positions.length) ));
@@ -212,7 +214,9 @@ class VoxelBuffer_t
 		this.PositionsTextureUvs = this.PositionsTextureUvs.flat(2);
 		this.PositionsTextureUvs = new Float32Array(this.PositionsTextureUvs);
 			
-		//	create the temp texture (todo: should be using a pool)
+		//	instead of a pool, we're setting up for double buffering
+		this.PreviousPositionsTexture = new Pop.Image();
+		this.PreviousPositionsTexture.WritePixels( w, h, Float4s, 'Float4' );
 		this.PreviousPositionsTexture = new Pop.Image();
 		this.PreviousPositionsTexture.WritePixels( w, h, Float4s, 'Float4' );
 			
@@ -289,7 +293,7 @@ let AppCamera = new Camera_t();
 //	try and emulate default XR pose a bit
 AppCamera.Position = [0,1.5,0];
 AppCamera.LookAt = [0,1.5,-1];
-AppCamera.FovVertical = 80;
+AppCamera.FovVertical = 90;
 let DefaultDepthTexture = CreateRandomImage(16,16);
 let VoxelCenterPosition = [0,0,AppCamera.LookAt[2]];//AppCamera.LookAt.slice();
 let CubeSize = 0.02;
