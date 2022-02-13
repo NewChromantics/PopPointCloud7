@@ -52,8 +52,13 @@ let BlitCopyShader;
 let BlitUpdatePositions;
 let BlitUpdateVelocitys;
 
-function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,VelocitysTexture,TempTexture,Projectiles)
+function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projectiles)
 {
+	const PositionTexture = VoxelBuffer.PositionsTexture;
+	const PreviousPositionsTexture = VoxelBuffer.PreviousPositionsTexture;
+	const VelocitysTexture = VoxelBuffer.VelocitysTexture;
+	const PreviousVelocitysTexture = VoxelBuffer.PreviousVelocitysTexture;
+	
 	const Commands = [];
 	
 	const BlitGeo = AssetManager.GetAsset('BlitQuad',RenderContext);
@@ -61,25 +66,13 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Ve
 	State.BlendMode = 'Blit';
 	
 	let TexelSize = [1.0 / PositionTexture.GetWidth(),1.0 / PositionTexture.GetHeight()];
-
-	//	test- copy old positions to new - this is causing a glitch in position (resolition?)
-	if ( false )
-	{
-		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
-		const Uniforms = {};
-		Uniforms.SourceTexture = TempTexture;
-		Commands.push(['SetRenderTarget',PositionTexture]);
-		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
-		return Commands;
-	}
-
 	
 	//	copy old velocities to temp texture
 	{
 		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
 		const Uniforms = {};
 		Uniforms.SourceTexture = VelocitysTexture;
-		Commands.push(['SetRenderTarget',TempTexture]);
+		Commands.push(['SetRenderTarget',PreviousVelocitysTexture]);
 		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
 	}
 
@@ -118,7 +111,7 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Ve
 	
 		const UpdateVelocitysShader = AssetManager.GetAsset(BlitUpdateVelocitys,RenderContext);
 		const Uniforms = {};
-		Uniforms.OldVelocitysTexture = TempTexture;
+		Uniforms.OldVelocitysTexture = PreviousVelocitysTexture;
 		Uniforms.PositionsTexture = PositionTexture;
 		Uniforms.ProjectilePrevPos = ProjectilePrevPos;
 		Uniforms.ProjectileNextPos = ProjectileNextPos;
@@ -135,7 +128,7 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Ve
 		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
 		const Uniforms = {};
 		Uniforms.SourceTexture = PositionTexture;
-		Commands.push(['SetRenderTarget',TempTexture]);
+		Commands.push(['SetRenderTarget',PreviousPositionsTexture]);
 		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
 	}
 
@@ -143,7 +136,7 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,PositionTexture,Ve
 	{
 		const UpdatePositionsShader = AssetManager.GetAsset(BlitUpdatePositions,RenderContext);
 		const Uniforms = {};
-		Uniforms.OldPositionsTexture = TempTexture;
+		Uniforms.OldPositionsTexture = PreviousPositionsTexture;
 		Uniforms.VelocitysTexture = VelocitysTexture;
 		Uniforms.TexelSize = TexelSize;
 		Commands.push(['SetRenderTarget',PositionTexture]);
@@ -159,10 +152,15 @@ class VoxelBuffer_t
 {
 	constructor()
 	{
-		this.PositionsTexture = null;
-		this.TempTexture = null;
-		this.VelocitysTexture = null;
+		//	base shape we're conforming to
+		this.ShapePositionsTexture = null;
 		this.Colours = null;
+		
+		//	live data
+		this.PositionsTexture = null;
+		this.PreviousPositionsTexture = null;
+		this.VelocitysTexture = null;
+		this.PreviousVelocitysTexture = null;
 	}
 	
 	LoadPositions(Positions,Colours=null,CenterPosition=[0,0,0],InitialVelocityScale=0)
@@ -215,13 +213,15 @@ class VoxelBuffer_t
 		this.PositionsTextureUvs = new Float32Array(this.PositionsTextureUvs);
 			
 		//	create the temp texture (todo: should be using a pool)
-		this.TempTexture = new Pop.Image();
-		this.TempTexture.WritePixels( w, h, Float4s, 'Float4' );
+		this.PreviousPositionsTexture = new Pop.Image();
+		this.PreviousPositionsTexture.WritePixels( w, h, Float4s, 'Float4' );
 			
 		let Velocity4s = new Array(w*h).fill(0).map(GetInitialVelocity4);
 		Velocity4s = new Float32Array(Velocity4s.flat(2));
 		this.VelocitysTexture = new Pop.Image();
 		this.VelocitysTexture.WritePixels( w, h, Velocity4s, 'Float4' );
+		this.PreviousVelocitysTexture = new Pop.Image();
+		this.PreviousVelocitysTexture.WritePixels( w, h, Velocity4s, 'Float4' );
 		
 		//	instancing buffer
 		if ( Colours.flat )
@@ -714,7 +714,7 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 	let PositionsTexture = VoxelsBuffer.PositionsTexture;
 	let VelocitysTexture = VoxelsBuffer.VelocitysTexture;
 	//	temp texture happens to have the previous positions
-	let PreviousPositionsTexture = VoxelsBuffer.TempTexture;
+	let PreviousPositionsTexture = VoxelsBuffer.PreviousPositionsTexture;
 
 	Uniforms.PhysicsPreviousPositionsTexture = PreviousPositionsTexture;
 	Uniforms.PhysicsPositionsTexture = PositionsTexture;
@@ -888,7 +888,7 @@ class Game_t
 		const Commands = [];
 		for ( let VoxelBuffer of this.VoxelBuffers )
 		{
-			const SomeCommands = GetRenderCommandsUpdatePhysicsTextures( RenderContext, VoxelBuffer.PositionsTexture, VoxelBuffer.VelocitysTexture, VoxelBuffer.TempTexture, Projectiles );
+			const SomeCommands = GetRenderCommandsUpdatePhysicsTextures( RenderContext, VoxelBuffer, Projectiles );
 			Commands.push(...SomeCommands);
 		}
 		return Commands;
