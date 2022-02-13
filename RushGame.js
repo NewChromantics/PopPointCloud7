@@ -810,7 +810,8 @@ class Game_t
 		this.Weapons = {};	//	named weapons for different inputs
 		this.Projectiles = [];
 		this.WorldBoundsSphere = [0,0,0,50];
-		this.WorldBoundsFloorY = 0;
+		//	projectiles are being culled before they get tested in physics
+		this.WorldBoundsFloorY = -3;
 	}
 	
 	GetWeapons()
