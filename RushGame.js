@@ -6,7 +6,7 @@ import {CreateRandomImage} from './PopEngine/Images.js'
 import {GetRandomColour} from './PopEngine/Colour.js'
 import * as PopMath from './PopEngine/Math.js'
 import Pop from './PopEngine/PopEngine.js'
-
+import GetBlitPixelTestRenderCommands from './BlitPixelsTest.js'
 import ParseMagicaVox from './PopEngine/MagicaVox.js'
 
 //	adreno (quest2) has a hardware optimised clear for 0,0,0 and 1,1,1
@@ -51,6 +51,15 @@ async function CreateBlitTriangleBuffer(RenderContext)
 	return TriangleBuffer;
 }
 
+async function CreateDebugQuadTriangleBuffer(RenderContext)
+{
+	const Geometry = CreateBlitGeometry();
+	const TriangleIndexes = undefined;
+	const TriangleBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
+	return TriangleBuffer;
+}
+
+let DebugQuadShader;
 let BlitCopyShader;
 let BlitUpdatePositions;
 let BlitUpdateVelocitys;
@@ -763,6 +772,25 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 	PushCommand( DrawCube );
 }
 
+function RenderDebugQuad( PushCommand, RenderContext, DebugTexture, Index )
+{
+	const Geo = AssetManager.GetAsset('DebugQuad',RenderContext);
+	const Shader = AssetManager.GetAsset(DebugQuadShader,RenderContext);
+
+	const Tilesx = 4;
+	const Tilesy = 4;
+	const Width = 1/Tilesx;
+	const Height = 1/Tilesy;
+	let Left = Index % Tilesx;
+	let Top = Math.floor(Index/Tilesx);
+	
+	const Uniforms = {};
+	Uniforms.Rect = [Left,Top,Width,Height];
+	Uniforms.Texture = DebugTexture;
+	PushCommand(['Draw',Geo,Shader,Uniforms]);
+}
+
+
 class Projectile_t
 {
 	constructor(Position=[0,0,0],InitialForce=[0,0,0],GravityMult=1,Drag=0.00001)
@@ -912,6 +940,14 @@ class Game_t
 		Weapons.forEach( w => w.Tick(TimestepSecs,this.PositionInsideBounds.bind(this)) );
 	}
 	
+	GetDebugTextures()
+	{
+		let Textures = [
+			this.PixelTestOutput
+		];
+		Textures = Textures.filter( t => t!=null );
+		return Textures;
+	}
 	
 	GetPhysicsRenderCommands(RenderContext,TimestepSecs)
 	{
@@ -924,6 +960,26 @@ class Game_t
 			const SomeCommands = GetRenderCommandsUpdatePhysicsTextures( RenderContext, VoxelBuffer, Projectiles );
 			Commands.push(...SomeCommands);
 		}
+		
+		if ( !this.PixelTestOutput )
+		{
+			this.PixelTestOutput = new Pop.Image();
+			const w = 128;
+			const h = 128;
+			let rgba = new Array(w*h).fill([0,255,0,255]);
+			rgba = new Float32Array(rgba.flat(2));
+			this.PixelTestOutput.WritePixels(w,h,rgba,'RGBA');
+		}
+		try
+		{
+			const TestCommands = GetBlitPixelTestRenderCommands(RenderContext,this.PixelTestOutput, this.VoxelBuffers[0] );
+			Commands.push(...TestCommands);
+		}
+		catch(e)
+		{
+			console.error(e);
+		}
+		
 		return Commands;
 	}
 	
@@ -1044,6 +1100,7 @@ export default class App_t
 			return;
 		AssetManager.RegisterAssetAsyncFetchFunction('Cube', CreateCubeTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('BlitQuad', CreateBlitTriangleBuffer );
+		AssetManager.RegisterAssetAsyncFetchFunction('DebugQuad', CreateDebugQuadTriangleBuffer );
 
 		const VertFilename = 'Geo.vert.glsl';
 		const FragFilename = 'Colour.frag.glsl';
@@ -1056,6 +1113,8 @@ export default class App_t
 		BlitCopyShader = AssetManager.RegisterShaderAssetFilename('BlitCopy.frag.glsl',VertBlitQuadFilename);
 		BlitUpdatePositions = AssetManager.RegisterShaderAssetFilename('BlitUpdatePositions.frag.glsl',VertBlitQuadFilename);
 		BlitUpdateVelocitys = AssetManager.RegisterShaderAssetFilename('BlitUpdateVelocitys.frag.glsl',VertBlitQuadFilename);
+
+		DebugQuadShader = AssetManager.RegisterShaderAssetFilename('DebugQuad.frag.glsl','DebugQuad.vert.glsl');
 	}
 	
 	BindXrControls(Device)
@@ -1228,6 +1287,15 @@ export default class App_t
 			RenderCubes( PushCommand, RenderContext, CameraUniforms, Transforms, Velocitys );
 		}
 		
+		
+		{
+			const DebugTextures = this.Game.GetDebugTextures();
+			function Render(DebugTexture,Index)
+			{
+				RenderDebugQuad( PushCommand, RenderContext, DebugTexture, Index );
+			}
+			DebugTextures.forEach( Render );
+		}
 
 		return [ClearCommand,...CubeCommands];
 	}
