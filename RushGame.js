@@ -226,7 +226,16 @@ class VoxelBuffer_t
 		{
 			function GetInitialPositon4(xxx,Index)
 			{
-				let xyz = [Math.random()+0,0,Math.random()-5];
+				//	not well distributed, but doesnt matter, just favour away from 0 for radius
+				const Angle = Math.random() * PopMath.DegToRad(360);
+				let Radius = Math.random();
+				Radius = 1.0 - (Radius*Radius);
+				Radius *= 20;
+				const x = Math.cos(Angle) * Radius;
+				const y = 0;
+				const z = Math.sin(Angle) * Radius;
+				//let xyz = [Math.random()+0,0,Math.random()-5];
+				let xyz = [x,y,z-5];
 				xyz = Add3( xyz, CenterPosition );
 				return [xyz,1];
 			}
