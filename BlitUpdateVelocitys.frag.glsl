@@ -21,7 +21,7 @@ uniform float CubeSize;//	radius
 #define ProjectileRadius	(CubeSize*7.0)	//	scale to make it a bit easier to hit stuff
 
 #define PROJECTILE_HIT_RANDOMNESS	(0.9)
-#define SPRING_FORCE				(10.0)
+#define SPRING_FORCE_MINMAX			vec2(2.0,6.0)
 #define SPRING_NOISE_FACTOR			(0.1)
 #define PROJECTILE_HIT_FORCE		(10.0)
 
@@ -36,7 +36,7 @@ struct Behaviour_t
 {
 	int		Type;
 	float	GravityForce;
-	float	SpringForce;
+	vec2	SpringForceMinMax;
 	float	SpringNoiseFactor;
 	mat4	ShapeLocalToWorldTransform;
 };
@@ -45,9 +45,9 @@ struct Behaviour_t
 #define BEHAVIOUR_STATIC	0
 #define BEHAVIOUR_DEBRIS	1
 #define BEHAVIOUR_SHAPE		2
-Behaviour_t Behaviour_Debris = Behaviour_t( BEHAVIOUR_DEBRIS,	GravityY,	0.0,			0.0,		mat_identity );
-Behaviour_t Behaviour_Static = Behaviour_t( BEHAVIOUR_STATIC,	0.0,		0.0,			0.0,		mat_identity );
-Behaviour_t Behaviour_Shape = Behaviour_t( BEHAVIOUR_SHAPE,		0.0,		SPRING_FORCE,	SPRING_NOISE_FACTOR,	mat_identity );
+Behaviour_t Behaviour_Debris = Behaviour_t( BEHAVIOUR_DEBRIS,	GravityY,	vec2(0),			0.0,		mat_identity );
+Behaviour_t Behaviour_Static = Behaviour_t( BEHAVIOUR_STATIC,	0.0,		vec2(0),			0.0,		mat_identity );
+Behaviour_t Behaviour_Shape = Behaviour_t( BEHAVIOUR_SHAPE,		0.0,		SPRING_FORCE_MINMAX,	SPRING_NOISE_FACTOR,	mat_identity );
 
 
 float GetBehaviourTypef(Behaviour_t Behaviour)
@@ -187,7 +187,8 @@ vec3 GetSpringForce(vec3 Position,float Random,vec3 ShapePosition,Behaviour_t Be
 {
 	vec3 Spring = ShapePosition - Position;
 	
-	float SpringForce = length(Spring) * Behaviour.SpringForce;
+	float SpringForce = length(Spring);
+	SpringForce *= mix( Behaviour.SpringForceMinMax.x, Behaviour.SpringForceMinMax.y, Random );
 	
 	//	add some noise to spring's direction
 	vec3 Noise = hash31(Random);
@@ -216,7 +217,7 @@ void main()
 	vec3 Force = vec3(0,0,0);
 
 	//	spring to shape position
-	if ( Behaviour.SpringForce != 0.0 )
+	if ( Behaviour.SpringForceMinMax.x != 0.0 )
 	{
 		vec4 ShapePosition = texture2D( ShapePositionsTexture, SampleUv );
 		float Random = ShapePosition.w;
