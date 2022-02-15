@@ -11,7 +11,7 @@ import ParseMagicaVox from './PopEngine/MagicaVox.js'
 
 //	adreno (quest2) has a hardware optimised clear for 0,0,0 and 1,1,1
 //	somehow this should be passed from XR api/camera (default clear?)
-const ClearColour = [0,1,0,1];
+const ClearColour = [0,0,0,1];
 
 const BEHAVIOUR_STATIC = 0;
 const BEHAVIOUR_DEBRIS = 1;
