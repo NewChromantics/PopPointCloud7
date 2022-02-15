@@ -995,7 +995,7 @@ class Game_t
 			const w = 128;
 			const h = 128;
 			let rgba = new Array(w*h).fill([0,255,0,255]);
-			rgba = new Float32Array(rgba.flat(2));
+			rgba = new Uint8Array(rgba.flat(2));
 			this.OccupancyTexture.WritePixels(w,h,rgba,'RGBA');
 		}
 		try
