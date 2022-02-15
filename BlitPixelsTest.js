@@ -77,7 +77,9 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	Uniforms.OccupancyMapWorldMax = OccupancyMapSize.WorldMax;
 	
 	const State = {};
-	State.DepthWrite = false;
+	//	turning depth write off seems to make the texture not resolve before rendering left eye
+	//	too slow?
+	State.DepthWrite = true;
 	State.DepthRead = false;
 	State.BlendMode = 'Max';
 	
