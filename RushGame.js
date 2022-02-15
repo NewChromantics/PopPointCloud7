@@ -17,7 +17,7 @@ const BEHAVIOUR_STATIC = 0;
 const BEHAVIOUR_DEBRIS = 1;
 const BEHAVIOUR_SHAPE = 2;
 
-const CubeVelocityStretch = 4.0;
+const CubeVelocityStretch = 5.0;
 const FloorColour = [196, 64, 24,255].map(x=>x/255);
 
 const RenderDebugQuads = false;	//	need to avoid in xr
