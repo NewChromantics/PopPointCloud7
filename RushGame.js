@@ -26,8 +26,8 @@ const DebugQuadTilesy = 10;
 
 const OccupancyMapSize = 
 {
-	WorldMin:[-5,-1,0],
-	WorldMax:[5,3,-10],
+	WorldMin:[-6,-1,0],
+	WorldMax:[6,3,-10],
 };
 
 async function CreateCubeTriangleBuffer(RenderContext)

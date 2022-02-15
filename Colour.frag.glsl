@@ -14,6 +14,7 @@ varying vec2 FragLocalUv;
 varying vec3 FragLocalPosition;
 varying vec2 FragViewUv;
 varying vec3 ClipPosition;
+varying vec3 FragWorldNormal;
 
 varying vec3 FragCameraPosition;
 
@@ -49,7 +50,7 @@ bool Inside01(vec2 uv)
 	return (uv.x>=0.0)&&(uv.y>=0.0)&&(uv.x<1.0)&&(uv.y<1.0);
 }
 
-float GetOccupancyMapShadow(vec3 WorldPosition)
+float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 {
 	vec3 Mapxzy = GetMapPxzY(WorldPosition);
 	vec2 OccupancyUv = Mapxzy.xy / OccupancyMapTextureSize;
@@ -128,6 +129,35 @@ vec3 GetSceneWorldPosition()
 	return WorldPos3;
 }
 
+float Fresnel(vec3 eyeVector, vec3 worldNormal)
+{
+	const float FresnelFactor = 3.0;
+	return pow( 1.0 + dot( eyeVector, worldNormal), FresnelFactor );
+}
+
+float PhongLightFactor()
+{
+	//	Y is backwards here...
+	vec3 LightWorldPosition = vec3(1,10,0);
+	
+	vec3 DirToLight = normalize(LightWorldPosition - FragWorldPosition);
+	float Dot = dot( FragWorldNormal, DirToLight );
+	Dot = Range( -1.0, 1.0, Dot );
+	return Dot;
+}
+
+vec3 ApplyLighting(vec3 Colour)
+{
+	float Light = PhongLightFactor();
+	float Shadow = GetOccupancyMapShadowFactor( FragWorldPosition );
+
+	Light *= 1.0 - Shadow;
+
+	vec3 DarkColour = Colour - vec3(0.5);	
+	vec3 LightColour = Colour + vec3(0.5);
+	Colour = mix( DarkColour, LightColour, Light );	
+	return Colour;
+}
 
 
 void main()
@@ -138,16 +168,7 @@ void main()
 	if ( !HAS_DEPTH )
 	{
 		gl_FragColor = FragColour;
-		/*
-		vec3 Mapxzy = GetMapPxzY(FragWorldPosition);
-		vec2 OccupancyUv = Mapxzy.xy ;
-		gl_FragColor.xy = FragWorldPosition.xz;
-		*/
-		//	apply shadow
-		vec3 ShadowColour = vec3(0.1);
-		float Shadow = GetOccupancyMapShadow( FragWorldPosition );
-		gl_FragColor.xyz = mix( gl_FragColor.xyz, ShadowColour, Shadow ); 
-
+		gl_FragColor.xyz = ApplyLighting( FragColour.xyz );
 
 		return;
 	}

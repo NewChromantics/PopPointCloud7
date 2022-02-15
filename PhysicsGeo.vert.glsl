@@ -1,13 +1,15 @@
 attribute float3 LocalPosition;
 attribute float3 LocalUv;
+attribute vec3 LocalNormal;
 varying float3 FragWorldPosition;
 varying float3 FragLocalPosition;
 varying float2 FragLocalUv;
 varying vec3 FragCameraPosition;	//	position in camera space
 varying vec2 FragViewUv;
 varying vec3 ClipPosition;
-varying float TriangleIndex;
 varying vec4 FragColour;
+varying vec3 FragLocalNormal;
+varying vec3 FragWorldNormal;
 
 #define LocalToWorldTransform GetLocalToWorldTransform()
 //attribute mat4 LocalToWorldTransform;
@@ -97,6 +99,9 @@ void main()
 	vec4 CameraPos = WorldToCameraTransform * vec4(WorldPos,1.0);	//	world to camera space
 	vec4 ProjectionPos = CameraProjectionTransform * CameraPos;
 
+	vec4 WorldNormal = LocalToWorldTransform * vec4(LocalNormal,0.0);
+	WorldNormal.xyz = normalize(WorldNormal.xyz);
+
 	gl_Position = ProjectionPos;
 	
 	FragViewUv = gl_Position.xy;
@@ -109,7 +114,8 @@ void main()
 	FragColour = vec4( LocalUv, 1 );
 	FragLocalPosition = LocalPosition;
 	FragLocalUv = LocalUv.xy;
-	TriangleIndex = LocalUv.z;
 	FragColour = Colour;
+	FragLocalNormal = LocalNormal;
+	FragWorldNormal = WorldNormal.xyz;
 }
 
