@@ -17,6 +17,61 @@ varying vec3 ClipPosition;
 
 varying vec3 FragCameraPosition;
 
+uniform sampler2D OccupancyMapTexture;
+uniform vec2 OccupancyMapTextureSize;
+uniform vec3 OccupancyMapWorldMin;
+uniform vec3 OccupancyMapWorldMax;
+
+float Range(float Min,float Max,float Value)
+{
+	return (Value-Min) / (Max-Min);
+}
+
+float Range01(float Min,float Max,float Value)
+{
+	return clamp( Range( Min, Max, Value ), 0.0, 1.0 );
+}
+
+vec3 GetMapPxzY(vec3 WorldPosition)
+{
+	vec3 WorldUv;
+	WorldUv.x = Range01( OccupancyMapWorldMin.x, OccupancyMapWorldMax.x, WorldPosition.x );
+	WorldUv.y = Range01( OccupancyMapWorldMin.y, OccupancyMapWorldMax.y, WorldPosition.y );
+	WorldUv.z = Range01( OccupancyMapWorldMin.z, OccupancyMapWorldMax.z, WorldPosition.z );
+	
+	vec2 MapPxz = floor( WorldUv.xz * OccupancyMapTextureSize );
+	float MapY = WorldUv.y;// * 255.0;
+	return vec3( MapPxz, MapY );
+}
+
+bool Inside01(vec2 uv)
+{
+	return (uv.x>=0.0)&&(uv.y>=0.0)&&(uv.x<1.0)&&(uv.y<1.0);
+}
+
+float GetOccupancyMapShadow(vec3 WorldPosition)
+{
+	vec3 Mapxzy = GetMapPxzY(WorldPosition);
+	vec2 OccupancyUv = Mapxzy.xy / OccupancyMapTextureSize;
+	vec4 Occupancy = texture2D( OccupancyMapTexture, OccupancyUv );
+	bool OccupancyValid = (Occupancy.w > 0.0) && Inside01(OccupancyUv);
+	float HighestOccupiedY = mix( OccupancyMapWorldMin.y, OccupancyMapWorldMax.y, Occupancy.w );
+	
+	if ( !OccupancyValid )
+		return 0.0;
+	
+	//	is there a point above us?
+	float Distance = HighestOccupiedY - WorldPosition.y;
+	return Distance > 0.0 ? 1.0 : 0.0;
+	
+	float MaxShadowDistance = 3.0;
+	Distance /= MaxShadowDistance;
+	//	Scale shadow with how far away it is
+	Distance = 1.0 - clamp( Distance, 0.0, 1.0 );
+	return Distance;
+}
+
+
 const float ValueToMetres = 0.0010000000474974513;
 
 float GetViewDepth()
@@ -83,6 +138,17 @@ void main()
 	if ( !HAS_DEPTH )
 	{
 		gl_FragColor = FragColour;
+		/*
+		vec3 Mapxzy = GetMapPxzY(FragWorldPosition);
+		vec2 OccupancyUv = Mapxzy.xy ;
+		gl_FragColor.xy = FragWorldPosition.xz;
+		*/
+		//	apply shadow
+		vec3 ShadowColour = vec3(0.1);
+		float Shadow = GetOccupancyMapShadow( FragWorldPosition );
+		gl_FragColor.xyz = mix( gl_FragColor.xyz, ShadowColour, Shadow ); 
+
+
 		return;
 	}
 	

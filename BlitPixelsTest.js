@@ -20,7 +20,7 @@ async function CreateQuadTriangleBuffer(RenderContext)
 
 let PixelTestShaderName = null;
 
-export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTexture,VoxelBuffer)
+export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTexture,VoxelBuffer,OccupancyMapSize)
 {
 	const Test = false;
 	
@@ -62,7 +62,7 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	PixelPositions = new Float32Array(PixelPositions);
 
 	const Clear = [0,0,0,0];
-	const ReadBack = true;
+	const ReadBack = false;
 	const SetRenderTarget = ['SetRenderTarget',OutputTexture,Clear,ReadBack];
 	
 	//	render pixels
@@ -73,6 +73,8 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	Uniforms.PixelPosition = PixelPositions;
 	Uniforms.OutputTextureSize = [w,h];
 	Uniforms.PositionsTexture = VoxelBuffer.PositionsTexture;
+	Uniforms.OccupancyMapWorldMin = OccupancyMapSize.WorldMin;
+	Uniforms.OccupancyMapWorldMax = OccupancyMapSize.WorldMax;
 	
 	const State = {};
 	State.DepthWrite = false;

@@ -11,11 +11,24 @@ import ParseMagicaVox from './PopEngine/MagicaVox.js'
 
 //	adreno (quest2) has a hardware optimised clear for 0,0,0 and 1,1,1
 //	somehow this should be passed from XR api/camera (default clear?)
-const ClearColour = [0,0,0];
+const ClearColour = [0,1,0,1];
 
 const BEHAVIOUR_STATIC = 0;
 const BEHAVIOUR_DEBRIS = 1;
 const BEHAVIOUR_SHAPE = 2;
+
+const CubeVelocityStretch = 4.0;
+const FloorColour = [196, 64, 24,255].map(x=>x/255);
+
+const RenderDebugQuads = false;	//	need to avoid in xr
+const DebugQuadTilesx = 10;
+const DebugQuadTilesy = 10;
+
+const OccupancyMapSize = 
+{
+	WorldMin:[-5,-1,0],
+	WorldMax:[5,3,-10],
+};
 
 async function CreateCubeTriangleBuffer(RenderContext)
 {
@@ -314,7 +327,7 @@ function GetCubeLocalToWorldN(xyz,Index)
 function GetColourN(xyz,Index)
 {
 	if ( Index == 0 )
-		return [0,1,0,0];
+		return [0,1,0,1];
 	let rgb = GetRandomColour();
 	const r = lerp( 0.4, 0.9, Math.random() );
 	const b = lerp( 0.4, 0.9, Math.random() );
@@ -330,7 +343,7 @@ let CubePhysicsShader = null;
 let AppCamera = new Camera_t();
 //	try and emulate default XR pose a bit
 AppCamera.Position = [0,1.5,0];
-AppCamera.LookAt = [0,1.5,-1];
+AppCamera.LookAt = [0,1.5,-2];
 AppCamera.FovVertical = 90;
 let DefaultDepthTexture = CreateRandomImage(16,16);
 let VoxelCenterPosition = [0,0,AppCamera.LookAt[2]];//AppCamera.LookAt.slice();
@@ -720,7 +733,7 @@ class WeaponGun_t extends Weapon_t
 }
 
 
-function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,CubeVelocitys)
+function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,CubeVelocitys,OccupancyTexture,Colours=RandomColours)
 {
 	if ( !CubeTransforms.length )
 		return;
@@ -731,7 +744,13 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,Cub
 	const Uniforms = Object.assign({},CameraUniforms);
 	Uniforms.LocalToWorldTransform = CubeTransforms;
 	Uniforms.WorldVelocity = CubeVelocitys;
-	Uniforms.Colour = RandomColours.slice( 0, CubeTransforms.length*4 );
+	Uniforms.Colour = Colours.slice( 0, CubeTransforms.length*4 );
+	Uniforms.VelocityStretch = CubeVelocityStretch;
+	
+	Uniforms.OccupancyMapWorldMin = OccupancyMapSize.WorldMin;
+	Uniforms.OccupancyMapWorldMax = OccupancyMapSize.WorldMax;
+	Uniforms.OccupancyMapTexture = OccupancyTexture;
+	Uniforms.OccupancyMapTextureSize = [OccupancyTexture.GetWidth(),OccupancyTexture.GetHeight()];
 
 	const State = {};
 	State.BlendMode = 'Blit';
@@ -741,7 +760,7 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,Cub
 	PushCommand( DrawCube );
 }
 
-function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsBuffer)
+function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsBuffer,OccupancyTexture)
 {
 	if ( !VoxelsBuffer )
 		return;
@@ -752,6 +771,7 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 	const Uniforms = Object.assign({},CameraUniforms);
 	//Uniforms.LocalToWorldTransform = CubeTransforms;
 	Uniforms.Colour = VoxelsBuffer.Colours;
+	Uniforms.VelocityStretch = CubeVelocityStretch;
 
 	let PositionsTexture = VoxelsBuffer.PositionsTexture;
 	let VelocitysTexture = VoxelsBuffer.VelocitysTexture;
@@ -763,6 +783,12 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 	Uniforms.PhysicsPositionsTextureSize = [PositionsTexture.GetWidth(),PositionsTexture.GetHeight()];
 	Uniforms.PhysicsPositionUv = VoxelsBuffer.PositionsTextureUvs;
 	Uniforms.PhysicsVelocitysTexture = VelocitysTexture;
+	
+	Uniforms.OccupancyMapWorldMin = OccupancyMapSize.WorldMin;
+	Uniforms.OccupancyMapWorldMax = OccupancyMapSize.WorldMax;
+	Uniforms.OccupancyMapTexture = OccupancyTexture;
+	Uniforms.OccupancyMapTextureSize = [OccupancyTexture.GetWidth(),OccupancyTexture.GetHeight()];
+	
 	
 	const State = {};
 	State.BlendMode = 'Blit';
@@ -777,17 +803,15 @@ function RenderDebugQuad( PushCommand, RenderContext, DebugTexture, Index, DrawT
 	const Geo = AssetManager.GetAsset('DebugQuad',RenderContext);
 	const Shader = AssetManager.GetAsset(DebugQuadShader,RenderContext);
 
-	const Tilesx = 4;
-	const Tilesy = 4;
-	const Width = 1/Tilesx;
-	const Height = 1/Tilesy;
-	let Left = Index % Tilesx;
-	let Top = Math.floor(Index/Tilesx);
+	const Width = 1/DebugQuadTilesx;
+	const Height = 1/DebugQuadTilesy;
+	let Left = Index % DebugQuadTilesx;
+	let Top = Math.floor(Index/DebugQuadTilesx);
 	
 	const Uniforms = {};
 	Uniforms.Rect = [Left,Top,Width,Height];
 	Uniforms.Texture = DebugTexture;
-	
+
 	const State = {};
 	State.BlendMode = DrawTransparent ? 'Alpha' : 'Blit';
 	
@@ -947,7 +971,7 @@ class Game_t
 	GetDebugTextures()
 	{
 		let Textures = [
-			this.PixelTestOutput
+			this.OccupancyTexture
 		];
 		Textures = Textures.filter( t => t!=null );
 		return Textures;
@@ -965,18 +989,18 @@ class Game_t
 			Commands.push(...SomeCommands);
 		}
 		
-		if ( !this.PixelTestOutput )
+		if ( !this.OccupancyTexture )
 		{
-			this.PixelTestOutput = new Pop.Image();
+			this.OccupancyTexture = new Pop.Image();
 			const w = 128;
 			const h = 128;
 			let rgba = new Array(w*h).fill([0,255,0,255]);
 			rgba = new Float32Array(rgba.flat(2));
-			this.PixelTestOutput.WritePixels(w,h,rgba,'RGBA');
+			this.OccupancyTexture.WritePixels(w,h,rgba,'RGBA');
 		}
 		try
 		{
-			const TestCommands = GetBlitPixelTestRenderCommands(RenderContext,this.PixelTestOutput, this.VoxelBuffers[0] );
+			const TestCommands = GetBlitPixelTestRenderCommands(RenderContext,this.OccupancyTexture, this.VoxelBuffers[0], OccupancyMapSize );
 			Commands.push(...TestCommands);
 		}
 		catch(e)
@@ -1267,18 +1291,20 @@ export default class App_t
 		
 		for ( let Voxels of this.Game.VoxelBuffers )
 		{
-			RenderVoxelBufferCubes( PushCommand, RenderContext, CameraUniforms, Voxels );
+			RenderVoxelBufferCubes( PushCommand, RenderContext, CameraUniforms, Voxels, this.Game.OccupancyTexture );
 		}
 		
 		this.Game.UpdateWeaponDesktop(Camera);
 		
+		//	weapon cube(shapes)
 		for ( let Weapon of this.Game.GetWeapons() )
 		{
 			const Positions = Weapon.GetRenderLocalToWorldTransforms();
 			const Velocitys = new Array(Positions.length).fill([0,0,0]);
-			RenderCubes( PushCommand, RenderContext, CameraUniforms, Positions, Velocitys );
+			RenderCubes( PushCommand, RenderContext, CameraUniforms, Positions, Velocitys, this.Game.OccupancyTexture );
 		}
 		
+		//	projectile cubes
 		{
 			let Transforms = [];
 			let Velocitys = [];
@@ -1288,10 +1314,26 @@ export default class App_t
 				Velocitys.push( Projectile.Velocity );
 			}
 			this.Game.EnumProjectiles(OnProjectile);
-			RenderCubes( PushCommand, RenderContext, CameraUniforms, Transforms, Velocitys );
+			RenderCubes( PushCommand, RenderContext, CameraUniforms, Transforms, Velocitys, this.Game.OccupancyTexture );
 		}
 		
+		//	floor cube
+		{
+			let FloorCubeScale = 0.01;
+			let FloorCubeWidth = 800;
+			let FloorCubeHeight = CubeSize * 1.0 * FloorCubeScale;
+			let FloorZ = -10;
+			FloorCubeHeight += CubeSize * 2.0;
+			let FloorTransform = PopMath.CreateTranslationScaleMatrix( [0,-FloorCubeHeight,FloorZ], [FloorCubeWidth,FloorCubeScale,FloorCubeWidth] );
+			
+			let Transforms = [FloorTransform];
+			let Velocitys = [[0,0,0]];
+			let Colours = [FloorColour];
+			RenderCubes( PushCommand, RenderContext, CameraUniforms, Transforms, Velocitys, this.Game.OccupancyTexture, Colours );
+		}
 		
+		//	dont do this in xr
+		if ( RenderDebugQuads )
 		{
 			const DebugTextures = this.Game.GetDebugTextures();
 			function Render(DebugTexture,Index)

@@ -11,6 +11,9 @@ uniform sampler2D PositionsTexture;
 
 varying vec4 OutputColour;
 
+uniform vec3 OccupancyMapWorldMin;
+uniform vec3 OccupancyMapWorldMax;
+
 
 vec3 GetWorldPosition()
 {
@@ -28,15 +31,13 @@ float Range01(float Min,float Max,float Value)
 	return clamp( Range( Min, Max, Value ), 0.0, 1.0 );
 }
 
-const vec3 WorldMin = vec3(-5,-1,0);
-const vec3 WorldMax = vec3(5,3,-10);
 
 vec3 GetMapPxzY(vec3 WorldPosition)
 {
 	vec3 WorldUv;
-	WorldUv.x = Range01( WorldMin.x, WorldMax.x, WorldPosition.x );
-	WorldUv.y = Range01( WorldMin.y, WorldMax.y, WorldPosition.y );
-	WorldUv.z = Range01( WorldMin.z, WorldMax.z, WorldPosition.z );
+	WorldUv.x = Range01( OccupancyMapWorldMin.x, OccupancyMapWorldMax.x, WorldPosition.x );
+	WorldUv.y = Range01( OccupancyMapWorldMin.y, OccupancyMapWorldMax.y, WorldPosition.y );
+	WorldUv.z = Range01( OccupancyMapWorldMin.z, OccupancyMapWorldMax.z, WorldPosition.z );
 	
 	vec2 MapPxz = floor( WorldUv.xz * OutputTextureSize );
 	float MapY = WorldUv.y;// * 255.0;

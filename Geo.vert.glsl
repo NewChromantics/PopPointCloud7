@@ -15,18 +15,21 @@ uniform mat4 WorldToCameraTransform;
 uniform mat4 CameraProjectionTransform;
 attribute vec4 Colour;
 
+uniform float VelocityStretch;
+
+
 vec3 GetWorldPos()
 {
 	vec4 WorldPos = LocalToWorldTransform * vec4(LocalPosition,1.0);
-	WorldPos.xyz /= WorldPos.www;
+	WorldPos.xyz *= WorldPos.www;
 	WorldPos.w = 1.0;
 
 	vec4 OriginWorldPos = LocalToWorldTransform * vec4(0,0,0,1);
-	OriginWorldPos.xyz /= OriginWorldPos.www;
+	OriginWorldPos.xyz *= OriginWorldPos.www;
 	OriginWorldPos.w = 1.0;	
 	
 	//	stretch world pos along velocity
-	vec3 TailDelta = -WorldVelocity * 2.0 * (1.0/60.0);
+	vec3 TailDelta = -WorldVelocity * VelocityStretch * (1.0/60.0);
 	
 	//	old method
 	//WorldPos.xyz += -WorldVelocity * 1.5 * LocalPosition.z;
