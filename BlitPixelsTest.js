@@ -61,8 +61,9 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	}
 	PixelPositions = new Float32Array(PixelPositions);
 
+	const Clear = [0,0,0,0];
 	const ReadBack = true;
-	const SetRenderTarget = ['SetRenderTarget',OutputTexture,[1,0,0,1],ReadBack];
+	const SetRenderTarget = ['SetRenderTarget',OutputTexture,Clear,ReadBack];
 	
 	//	render pixels
 	const Geo = AssetManager.GetAsset('Quad',RenderContext);
@@ -76,7 +77,7 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	const State = {};
 	State.DepthWrite = false;
 	State.DepthRead = false;
-	State.BlendMode = 'Add';
+	State.BlendMode = 'Max';
 	
 	const DrawPixels = ['Draw',Geo,Shader,Uniforms,State];
 	
