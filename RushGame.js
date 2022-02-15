@@ -252,12 +252,12 @@ class VoxelBuffer_t
 				const Angle = Math.random() * PopMath.DegToRad(360);
 				let Radius = Math.random();
 				Radius = 1.0 - (Radius*Radius);
-				Radius *= 20;
+				Radius *= 1;
 				const x = Math.cos(Angle) * Radius;
 				const y = 0;
 				const z = Math.sin(Angle) * Radius;
 				//let xyz = [Math.random()+0,0,Math.random()-5];
-				let xyz = [x,y,z-5];
+				let xyz = [x-0.8,y,z-5];
 				xyz = Add3( xyz, CenterPosition );
 				return [xyz,1];
 			}
