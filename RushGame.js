@@ -772,7 +772,7 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 	PushCommand( DrawCube );
 }
 
-function RenderDebugQuad( PushCommand, RenderContext, DebugTexture, Index )
+function RenderDebugQuad( PushCommand, RenderContext, DebugTexture, Index, DrawTransparent )
 {
 	const Geo = AssetManager.GetAsset('DebugQuad',RenderContext);
 	const Shader = AssetManager.GetAsset(DebugQuadShader,RenderContext);
@@ -787,7 +787,11 @@ function RenderDebugQuad( PushCommand, RenderContext, DebugTexture, Index )
 	const Uniforms = {};
 	Uniforms.Rect = [Left,Top,Width,Height];
 	Uniforms.Texture = DebugTexture;
-	PushCommand(['Draw',Geo,Shader,Uniforms]);
+	
+	const State = {};
+	State.BlendMode = DrawTransparent ? 'Alpha' : 'Blit';
+	
+	PushCommand(['Draw',Geo,Shader,Uniforms,State]);
 }
 
 
@@ -1292,7 +1296,8 @@ export default class App_t
 			const DebugTextures = this.Game.GetDebugTextures();
 			function Render(DebugTexture,Index)
 			{
-				RenderDebugQuad( PushCommand, RenderContext, DebugTexture, Index );
+				const DrawTransparent = false;
+				RenderDebugQuad( PushCommand, RenderContext, DebugTexture, Index, DrawTransparent );
 			}
 			DebugTextures.forEach( Render );
 		}
