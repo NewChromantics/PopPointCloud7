@@ -1,7 +1,7 @@
 import Camera_t from './PopEngine/Camera.js'
 import AssetManager from './PopEngine/AssetManager.js'
 import {CreateCubeGeometry,MergeGeometry} from './PopEngine/CommonGeometry.js'
-import {CreateTranslationMatrix,Add3,Multiply3,Dot3,lerp,LengthSq3,Normalise3,Subtract3} from './PopEngine/Math.js'
+import {CreateTranslationMatrix,Add3,Multiply3,Dot3,lerp,Lerp,LengthSq3,Normalise3,Subtract3} from './PopEngine/Math.js'
 import {CreateRandomImage} from './PopEngine/Images.js'
 import {GetRandomColour} from './PopEngine/Colour.js'
 import * as PopMath from './PopEngine/Math.js'
@@ -19,6 +19,7 @@ const BEHAVIOUR_SHAPE = 2;
 
 const CubeVelocityStretch = 5.0;
 const FloorColour = [196, 64, 24,255].map(x=>x/255);
+const RenderFloor = false;
 
 const RenderDebugQuads = false;	//	need to avoid in xr
 const DebugQuadTilesx = 10;
@@ -35,6 +36,15 @@ const OccupancyMapSize =
 async function CreateCubeTriangleBuffer(RenderContext)
 {
 	const Geometry = CreateCubeGeometry(-CubeSize,CubeSize);
+	const TriangleIndexes = undefined;
+	const TriBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
+	return TriBuffer;
+}
+
+
+async function CreateUnitCubeTriangleBuffer(RenderContext)
+{
+	const Geometry = CreateCubeGeometry(0,1);
 	const TriangleIndexes = undefined;
 	const TriBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
 	return TriBuffer;
@@ -73,6 +83,18 @@ async function CreateDebugQuadTriangleBuffer(RenderContext)
 	const TriangleBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
 	return TriangleBuffer;
 }
+
+const ZeroArrayCache = {};	//	[Length] = Float32Array(0's)
+function GetZeroArray(Length)
+{
+	if ( !ZeroArrayCache[Length] )
+	{
+		ZeroArrayCache[Length] = new Float32Array(Length);
+		ZeroArrayCache[Length].fill(0);
+	}
+	return ZeroArrayCache[Length];
+}
+
 
 let DebugQuadShader;
 let BlitCopyShader;
@@ -176,6 +198,62 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projec
 	return Commands;
 }
 
+
+function GetBoundingBoxesFromOccupancy(OccupancyTexture)
+{
+	if ( !OccupancyTexture )
+		return [];
+	
+	let BoundingBoxes = [];
+
+	const w = OccupancyTexture.GetWidth();
+	const h = OccupancyTexture.GetHeight();
+	const Channels = OccupancyTexture.GetChannels();
+	if ( Channels != 4 )
+		throw `Expecting 4 channels in occupancy texture, not ${Channels}`;
+	const Pixels = OccupancyTexture.GetPixelBuffer();
+
+	let MapWorldSize = [
+		OccupancyMapSize.WorldMax[0] - OccupancyMapSize.WorldMin[0],
+		OccupancyMapSize.WorldMax[1] - OccupancyMapSize.WorldMin[1],
+		OccupancyMapSize.WorldMax[2] - OccupancyMapSize.WorldMin[2],
+	];
+	let MapPixelStep = [1/w,1,1/h];
+	MapPixelStep[0] *= MapWorldSize[0];
+	MapPixelStep[1] *= MapWorldSize[1];
+	MapPixelStep[2] *= MapWorldSize[2];
+	function DecodeRgba(px,py,rgba)
+	{
+		let MaxYWritten = rgba[0];
+		//if ( MaxYWritten <= 0 )	return null;
+		let u = px / w;
+		let v = py / h;
+		let yf = MaxYWritten / 255;
+		let x = Lerp( OccupancyMapSize.WorldMin[0], OccupancyMapSize.WorldMax[0], u ); 
+		let y = Lerp( OccupancyMapSize.WorldMin[1], OccupancyMapSize.WorldMax[1], yf ); 
+		let z = Lerp( OccupancyMapSize.WorldMin[2], OccupancyMapSize.WorldMax[2], v );
+		const Box = {};
+		Box.Min = [x,y,z];
+		Box.Size = MapPixelStep.slice();
+		Box.Size[1] = 0.10;
+		return Box;
+	}
+		
+	
+	for ( let i=0;	i<Pixels.length;	i+=Channels)
+	{
+		const Rgba = Pixels.slice( i, i+Channels );
+		const pi = i / Channels;
+		const x = pi % w;
+		const y = Math.floor( pi / w );
+		const Box = DecodeRgba( x, y, Rgba );
+		BoundingBoxes.push(Box);
+	}
+
+	BoundingBoxes = BoundingBoxes.filter( b => b!=null );
+
+	return BoundingBoxes;
+}
 
 
 class VoxelBuffer_t
@@ -339,7 +417,7 @@ function GetColourN(xyz,Index)
 	return [...rgb,a];
 }
 
-
+let BoundingBoxShader = null;
 let CubeShader = null;
 let CubePhysicsShader = null;
 let AppCamera = new Camera_t();
@@ -735,6 +813,43 @@ class WeaponGun_t extends Weapon_t
 }
 
 
+function RenderBoundingBoxes(PushCommand,RenderContext,CameraUniforms,BoundingBoxes)
+{
+	if ( !BoundingBoxes.length )
+		return;
+		
+	const Geo = AssetManager.GetAsset('UnitCube',RenderContext);
+	const Shader = AssetManager.GetAsset(BoundingBoxShader,RenderContext);
+
+	function BoundingBoxToLocalToWorld(BoundingBox)
+	{
+		//	get a scale and origin for cube 0..1
+		let Translation = BoundingBox.Min;
+		let Scale = BoundingBox.Size;
+		const LocalToWorld = PopMath.CreateTranslationScaleMatrix(Translation,Scale);
+		return LocalToWorld;
+	}
+
+	//	straight into a flat array is so much faster
+	//const LocalToWorlds = BoundingBoxes.map( BoundingBoxToLocalToWorld );
+	let LocalToWorlds = [];
+	BoundingBoxes.forEach( bb => LocalToWorlds.push( ...BoundingBoxToLocalToWorld(bb) ) );
+
+	const Uniforms = Object.assign({},CameraUniforms);
+	Uniforms.LocalToWorldTransform = LocalToWorlds;
+	Uniforms.WorldVelocity = GetZeroArray(3*LocalToWorlds.length);
+	Uniforms.Colour = GetZeroArray(4*LocalToWorlds.length);
+	Uniforms.VelocityStretch = 0.0;
+	
+	const State = {};
+	State.BlendMode = 'Blit';
+	State.DepthWrite = true;
+	State.DepthRead = true;
+		
+	const DrawCube = ['Draw',Geo,Shader,Uniforms,State];
+	PushCommand( DrawCube );
+}
+
 function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,CubeVelocitys,OccupancyTexture,Colours=RandomColours)
 {
 	if ( !CubeTransforms.length )
@@ -1037,8 +1152,8 @@ class Game_t
 		//	generate voxel enemies
 		this.VoxelBuffers = [];
 		
-		//const LoadFile = `Models/Taxi.vox`;
-		const LoadFile = `Models/Skeleton.vox`;
+		const LoadFile = `Models/Taxi.vox`;
+		//const LoadFile = `Models/Skeleton.vox`;
 		//const LoadFile = false;
 		
 		if ( !LoadFile )
@@ -1129,21 +1244,28 @@ export default class App_t
 		if ( CubeShader )
 			return;
 		AssetManager.RegisterAssetAsyncFetchFunction('Cube', CreateCubeTriangleBuffer );
+		AssetManager.RegisterAssetAsyncFetchFunction('UnitCube', CreateUnitCubeTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('BlitQuad', CreateBlitTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('DebugQuad', CreateDebugQuadTriangleBuffer );
 
-		const VertFilename = 'Geo.vert.glsl';
-		const FragFilename = 'Colour.frag.glsl';
-		CubeShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename);
-
-		const VertPhysicsFilename = 'PhysicsGeo.vert.glsl';
-		CubePhysicsShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename);
-
-		const VertBlitQuadFilename = 'BlitQuad.vert.glsl';
-		BlitCopyShader = AssetManager.RegisterShaderAssetFilename('BlitCopy.frag.glsl',VertBlitQuadFilename);
-		BlitUpdatePositions = AssetManager.RegisterShaderAssetFilename('BlitUpdatePositions.frag.glsl',VertBlitQuadFilename);
-		BlitUpdateVelocitys = AssetManager.RegisterShaderAssetFilename('BlitUpdateVelocitys.frag.glsl',VertBlitQuadFilename);
-
+		{
+			const VertFilename = 'Geo.vert.glsl';
+			const FragFilename = 'Colour.frag.glsl';
+			CubeShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename);
+			const VertPhysicsFilename = 'PhysicsGeo.vert.glsl';
+			CubePhysicsShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename);
+		}
+		{
+			const VertFilename = 'Geo.vert.glsl';
+			const FragFilename = 'BoundingBox.frag.glsl';
+			BoundingBoxShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename);
+		}
+		{
+			const VertBlitQuadFilename = 'BlitQuad.vert.glsl';
+			BlitCopyShader = AssetManager.RegisterShaderAssetFilename('BlitCopy.frag.glsl',VertBlitQuadFilename);
+			BlitUpdatePositions = AssetManager.RegisterShaderAssetFilename('BlitUpdatePositions.frag.glsl',VertBlitQuadFilename);
+			BlitUpdateVelocitys = AssetManager.RegisterShaderAssetFilename('BlitUpdateVelocitys.frag.glsl',VertBlitQuadFilename);
+		}
 		DebugQuadShader = AssetManager.RegisterShaderAssetFilename('DebugQuad.frag.glsl','DebugQuad.vert.glsl');
 	}
 	
@@ -1320,6 +1442,7 @@ export default class App_t
 		}
 		
 		//	floor cube
+		if ( RenderFloor )
 		{
 			let FloorCubeScale = 0.01;
 			let FloorCubeWidth = 800;
@@ -1344,6 +1467,13 @@ export default class App_t
 				RenderDebugQuad( PushCommand, RenderContext, DebugTexture, Index, DrawTransparent );
 			}
 			DebugTextures.forEach( Render );
+		}
+
+		const RenderOctree = true;
+		if ( RenderOctree )
+		{
+			const BoundingBoxes = GetBoundingBoxesFromOccupancy(this.Game.OccupancyTexture);
+			RenderBoundingBoxes( PushCommand, RenderContext, CameraUniforms, BoundingBoxes );
 		}
 
 		return [ClearCommand,...CubeCommands];

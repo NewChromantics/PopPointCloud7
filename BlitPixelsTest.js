@@ -62,7 +62,7 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	PixelPositions = new Float32Array(PixelPositions);
 
 	const Clear = [0,0,0,0];
-	const ReadBack = false;
+	const ReadBack = true;
 	const SetRenderTarget = ['SetRenderTarget',OutputTexture,Clear,ReadBack];
 	
 	//	render pixels
