@@ -1224,7 +1224,7 @@ export default class App_t
 				Camera.OnCameraFirstPersonRotate( x, y, 0, FirstDown!=false );
 			
 			if ( Button == 'Middle' )
-				Camera.OnCameraPan( x, y, 0, FirstDown!=false );
+				Camera.OnCameraPanLocal( -x, y, 0, FirstDown!=false );
 		}
 		
 		RenderView.OnMouseMove = function(x,y,Button)
