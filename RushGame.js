@@ -24,10 +24,12 @@ const RenderDebugQuads = false;	//	need to avoid in xr
 const DebugQuadTilesx = 10;
 const DebugQuadTilesy = 10;
 
+const OccupancyTextureWidth = 128;
+const OccupancyTextureHeight = 128;
 const OccupancyMapSize = 
 {
-	WorldMin:[-6,-1,0],
-	WorldMax:[6,3,-10],
+	WorldMin:[-7,-1,0],
+	WorldMax:[4,3,-10],
 };
 
 async function CreateCubeTriangleBuffer(RenderContext)
@@ -343,7 +345,7 @@ let CubePhysicsShader = null;
 let AppCamera = new Camera_t();
 //	try and emulate default XR pose a bit
 AppCamera.Position = [0,1.5,0];
-AppCamera.LookAt = [0,1.5,-2];
+AppCamera.LookAt = [0,1.5,-1];
 AppCamera.FovVertical = 90;
 let DefaultDepthTexture = CreateRandomImage(16,16);
 let VoxelCenterPosition = [0,0,AppCamera.LookAt[2]];//AppCamera.LookAt.slice();
@@ -992,8 +994,8 @@ class Game_t
 		if ( !this.OccupancyTexture )
 		{
 			this.OccupancyTexture = new Pop.Image();
-			const w = 128;
-			const h = 128;
+			const w = OccupancyTextureWidth;
+			const h = OccupancyTextureHeight;
 			let rgba = new Array(w*h).fill([0,255,0,255]);
 			rgba = new Uint8Array(rgba.flat(2));
 			this.OccupancyTexture.WritePixels(w,h,rgba,'RGBA');
