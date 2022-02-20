@@ -11,7 +11,7 @@ void main()
 	//gl_FragColor.w = 1.0;
 	
 	//	debug alpha
-	gl_FragColor.xyz = gl_FragColor.www;
+	//gl_FragColor.xyz = gl_FragColor.www;
 	gl_FragColor.w = 1.0;
 }
 

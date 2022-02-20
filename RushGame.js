@@ -17,7 +17,7 @@ const BEHAVIOUR_STATIC = 0;
 const BEHAVIOUR_DEBRIS = 1;
 const BEHAVIOUR_SHAPE = 2;
 
-const CubeVelocityStretch = 5.0;
+const CubeVelocityStretch = 0.0;
 const FloorColour = [196, 64, 24,255].map(x=>x/255);
 const RenderFloor = false;
 
@@ -26,12 +26,12 @@ const DebugQuadTilesx = 10;
 const DebugQuadTilesy = 10;
 
 const RenderOctree = true;
-const RenderOctreeInvalid = false;
+const RenderOctreeInvalid = true;
 const OccupancyTextureWidth = 128;
 const OccupancyTextureHeight = 128;
 const OccupancyMapSize = 
 {
-	WorldMin:[-7,0,0],
+	WorldMin:[-7,-0.1,0],
 	WorldMax:[4,2,-10],
 };
 
@@ -239,11 +239,15 @@ function GetBoundingBoxesFromOccupancy(OccupancyTexture)
 		let z = Lerp( OccupancyMapSize.WorldMin[2], OccupancyMapSize.WorldMax[2], v );
 		const Box = {};
 		Box.Min = [x,y,z];
-		Box.Size = MapPixelStep.slice();
+		Box.Size = MapPixelStep;
+		//Box.Size = MapPixelStep.slice();
 		//Box.Size[1] = 0.10;
 		return Box;
 	}
 	
+	//	precalc this pow as it's expensive
+	const SectionValues = new Array(YSectionsPerComponent).fill(0).map( (nul,cs) => Math.pow(10,cs) );
+		
 	function DecodeRgbaToBoundingBoxes(px,py,rgba)
 	{
 		const Boxs = [];
@@ -258,7 +262,8 @@ function GetBoundingBoxesFromOccupancy(OccupancyTexture)
 				//	b=0 is 1+1+1+1 etc
 				//	b=1 is 10+10+10
 				const YBitfield = rgba[SectionComponent];
-				let SectionValue = Math.pow(10,CompSection);
+				//let SectionValue = Math.pow(10,CompSection);
+				const SectionValue = SectionValues[CompSection];
 				let HitsInSection = Math.floor( YBitfield / SectionValue ) % 10;
 				const Set = (HitsInSection>0);
 				const SectionIndex = (SectionComponent*YSectionsPerComponent) + CompSection;
@@ -277,7 +282,12 @@ function GetBoundingBoxesFromOccupancy(OccupancyTexture)
 	
 	for ( let i=0;	i<Pixels.length;	i+=Channels)
 	{
-		const Rgba = Pixels.slice( i, i+Channels );
+		//const Rgba = Pixels.slice( i, i+Channels );
+		const r = Pixels[i+0];
+		const g = Pixels[i+1];
+		const b = Pixels[i+2];
+		const a = Pixels[i+3];
+		const Rgba = [r,g,b,a];
 		const pi = i / Channels;
 		const x = pi % w;
 		const y = Math.floor( pi / w );
@@ -867,22 +877,32 @@ function RenderBoundingBoxes(PushCommand,RenderContext,CameraUniforms,BoundingBo
 
 	//	straight into a flat array is so much faster
 	//const LocalToWorlds = BoundingBoxes.map( BoundingBoxToLocalToWorld );
-	let LocalToWorlds = [];
-	BoundingBoxes.forEach( bb => LocalToWorlds.push( ...BoundingBoxToLocalToWorld(bb) ) );
+	let BoundingBoxLocalToWorlds = [];
+	BoundingBoxes.forEach( bb => BoundingBoxLocalToWorlds.push( ...BoundingBoxToLocalToWorld(bb) ) );
 
-	const Uniforms = Object.assign({},CameraUniforms);
-	Uniforms.LocalToWorldTransform = LocalToWorlds;
-	Uniforms.WorldVelocity = GetZeroArray(3*LocalToWorlds.length);
-	Uniforms.Colour = GetZeroArray(4*LocalToWorlds.length);
-	Uniforms.VelocityStretch = 0.0;
-	
-	const State = {};
-	State.BlendMode = 'Blit';
-	State.DepthWrite = true;
-	State.DepthRead = true;
+	//	to avoid allocating new zero arrays often as this number of bounding boxes changes so wildly
+	//	do it in chunks so (ideally) it's 1 or 2 draw calls, one with only a small remainder
+	const DrawCallSize = 100*1000;
+	for ( let DrawCall=0;	DrawCall<Math.ceil(BoundingBoxLocalToWorlds.length/DrawCallSize);	DrawCall++ )
+	{
+		let LocalToWorlds = BoundingBoxLocalToWorlds.slice( DrawCall*DrawCallSize, (DrawCall+1)*DrawCallSize );
+		if ( LocalToWorlds.length < DrawCallSize )
+			LocalToWorlds.length = DrawCallSize;
+
+		const Uniforms = Object.assign({},CameraUniforms);
+		Uniforms.LocalToWorldTransform = LocalToWorlds;
+		Uniforms.WorldVelocity = GetZeroArray(3*LocalToWorlds.length);
+		Uniforms.Colour = GetZeroArray(4*LocalToWorlds.length);
+		Uniforms.VelocityStretch = 0.0;
 		
-	const DrawCube = ['Draw',Geo,Shader,Uniforms,State];
-	PushCommand( DrawCube );
+		const State = {};
+		State.BlendMode = 'Blit';
+		State.DepthWrite = true;
+		State.DepthRead = true;
+			
+		const DrawCube = ['Draw',Geo,Shader,Uniforms,State];
+		PushCommand( DrawCube );
+	}
 }
 
 function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,CubeVelocitys,OccupancyTexture,Colours=RandomColours)
