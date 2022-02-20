@@ -70,7 +70,7 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 	
 	while ( RenderView )
 	{
-		const GpuTickFps = 60;
+		const GpuTickFps = 30;
 		const MinWaitPromise = Pop.Yield(1000/GpuTickFps);
 		
 		//	only intermediately render if xr is running
@@ -106,8 +106,8 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 			catch(e)
 			{
 				console.error(e);
-				const ClearRed = ['SetRenderTarget',null,[1,0,0]];
-				Commands.splice(0,0,ClearRed);
+				//const ClearRed = ['SetRenderTarget',null,[1,0,0]];
+				//Commands.splice(0,0,ClearRed);
 			}
 			
 			await RenderContext.Render(Commands);

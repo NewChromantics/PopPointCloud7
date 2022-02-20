@@ -17,16 +17,20 @@ const BEHAVIOUR_STATIC = 0;
 const BEHAVIOUR_DEBRIS = 1;
 const BEHAVIOUR_SHAPE = 2;
 
-const CubeVelocityStretch = 0.0;
-const FloorColour = [196, 64, 24,255].map(x=>x/255);
-const RenderFloor = false;
+const CubeVelocityStretch = 2.0;
+const FloorColour = [24, 64, 196,255].map(x=>(x/255));
+//const FloorColour = [0.1,0.3,0.4,1.0];
+const RenderFloor = true;
+const FloorSize = 300;//800
 
-const RenderDebugQuads = true;	//	need to avoid in xr
+const RenderDebugQuads = false;	//	need to avoid in xr
 const DebugQuadTilesx = 10;
 const DebugQuadTilesy = 10;
 
-const RenderOctree = true;
-const RenderOctreeInvalid = true;
+const RenderOctree = false;
+const ReadBackOccupancyTexture = RenderOctree;
+const GenerateOccupancyTexture = true;
+
 const OccupancyTextureWidth = 128;
 const OccupancyTextureHeight = 128;
 const OccupancyMapSize = 
@@ -1170,14 +1174,18 @@ class Game_t
 			rgba = new Float32Array(rgba.flat(2));
 			this.OccupancyTexture.WritePixels(w,h,rgba,'Float4');
 		}
-		try
+		
+		if ( GenerateOccupancyTexture )
 		{
-			const TestCommands = GetBlitPixelTestRenderCommands(RenderContext,this.OccupancyTexture, this.VoxelBuffers[0], OccupancyMapSize );
-			Commands.push(...TestCommands);
-		}
-		catch(e)
-		{
-			console.error(e);
+			try
+			{
+				const TestCommands = GetBlitPixelTestRenderCommands(RenderContext,this.OccupancyTexture, this.VoxelBuffers[0], OccupancyMapSize, ReadBackOccupancyTexture );
+				Commands.push(...TestCommands);
+			}
+			catch(e)
+			{
+				console.error(e);
+			}
 		}
 		
 		return Commands;
@@ -1255,7 +1263,7 @@ class Game_t
 			{
 				if ( SkipEveryX!=0 && Index % SkipEveryX == 0 )
 					return null;
-				let ToneChange = (Math.random()-0.5)*0.10;
+				let ToneChange = (Math.random()-0.5)*0.05;
 				rgba[0] += ToneChange;
 				rgba[1] += ToneChange;
 				rgba[2] += ToneChange;
@@ -1500,11 +1508,12 @@ export default class App_t
 		if ( RenderFloor )
 		{
 			let FloorCubeScale = 0.01;
-			let FloorCubeWidth = 800;
+			let FloorCubeWidth = FloorSize;
 			let FloorCubeHeight = CubeSize * 1.0 * FloorCubeScale;
-			let FloorZ = -10;
+			let FloorZ = -5;
+			let FloorX = -3;
 			FloorCubeHeight += CubeSize * 2.0;
-			let FloorTransform = PopMath.CreateTranslationScaleMatrix( [0,-FloorCubeHeight,FloorZ], [FloorCubeWidth,FloorCubeScale,FloorCubeWidth] );
+			let FloorTransform = PopMath.CreateTranslationScaleMatrix( [FloorX,-FloorCubeHeight,FloorZ], [FloorCubeWidth,FloorCubeScale,FloorCubeWidth] );
 			
 			let Transforms = [FloorTransform];
 			let Velocitys = [[0,0,0]];

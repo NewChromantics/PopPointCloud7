@@ -20,7 +20,7 @@ async function CreateQuadTriangleBuffer(RenderContext)
 
 let PixelTestShaderName = null;
 
-export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTexture,VoxelBuffer,OccupancyMapSize)
+export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTexture,VoxelBuffer,OccupancyMapSize,ReadBackOccupancy)
 {
 	const Test = false;
 	
@@ -62,7 +62,7 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	PixelPositions = new Float32Array(PixelPositions);
 
 	const Clear = [0,0,0,0];
-	const ReadBack = true;
+	const ReadBack = ReadBackOccupancy;
 	const SetRenderTarget = ['SetRenderTarget',OutputTexture,Clear,ReadBack];
 	
 	//	render pixels
