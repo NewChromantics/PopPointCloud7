@@ -14,43 +14,43 @@ varying float MapYNormalised;
 //	we can probably live with this.
 //	we could write to a u32 texture, but its rarely supported, so 
 //	writing to float and errr, trial&error until we find where data gets screwed up
-float GetSectionValue(int Section)
+float GetSectionValue(float Section)
 {
 	//	pow(10,0)==1 ??
 	//return pow( 10.0, float(Section) );
-	if ( Section == 0 )		return 1.0;
-	if ( Section == 1 )		return 10.0;
-	if ( Section == 2 )		return 100.0;
-	if ( Section == 3 )		return 1000.0;
-	if ( Section == 4 )		return 10000.0;
-	if ( Section == 5 )		return 100000.0;
-	if ( Section == 6 )		return 1000000.0;
-	if ( Section == 7 )		return 10000000.0;
-	if ( Section == 8 )		return 100000000.0;
-	if ( Section == 9 )		return 1000000000.0;
-	if ( Section == 10 )	return 10000000000.0;
-	if ( Section == 11 )	return 100000000000.0;
+	if ( Section == 0.0 )		return 1.0;
+	if ( Section == 1.0 )		return 10.0;
+	if ( Section == 2.0 )		return 100.0;
+	if ( Section == 3.0 )		return 1000.0;
+	if ( Section == 4.0 )		return 10000.0;
+	if ( Section == 5.0 )		return 100000.0;
+	if ( Section == 6.0 )		return 1000000.0;
+	if ( Section == 7.0 )		return 10000000.0;
+	if ( Section == 8.0 )		return 100000000.0;
+	if ( Section == 9.0 )		return 1000000000.0;
+	if ( Section == 10.0 )	return 10000000000.0;
+	if ( Section == 11.0 )	return 100000000000.0;
+	return 0.0;
 }
 
 const int YSectionsPerComponent = 7;
+const float YSectionsPerComponentf = float(YSectionsPerComponent);
 const int YSectionComponents = 4;
-#define YSectionCount	(YSectionsPerComponent*YSectionComponents)
+const float YSectionCount = float(YSectionsPerComponent*YSectionComponents);
 
 void main()
 {
-	float Section = floor(MapYNormalised * float(YSectionCount) );
-	Section = clamp( Section, 0.0, float(YSectionCount-1) );
+	float Section = floor(MapYNormalised * YSectionCount );
+	Section = clamp( Section, 0.0, YSectionCount-1.0 );
 	
-	int Component = int(Section) / YSectionsPerComponent;
-	float CompSection = mod( Section, float(YSectionsPerComponent) );
+	float Component = floor( Section / YSectionsPerComponentf );
+	float CompSection = mod( Section, YSectionsPerComponentf );
 	
-	float CompSectionf = GetSectionValue( int(CompSection) );
-	
-	vec4 Output = vec4(0,0,0,0);
-	if ( Component == 0 )	Output.x = CompSectionf;
-	if ( Component == 1 )	Output.y = CompSectionf;
-	if ( Component == 2 )	Output.z = CompSectionf;
-	if ( Component == 3 )	Output.w = CompSectionf;
+	float CompSectionf = GetSectionValue( CompSection );
+
+	//	not sure if this is faster than if's	
+	vec4 ComponentMask = vec4( Component==0.0, Component==1.0, Component==2.0, Component==3.0 );
+	vec4 Output = ComponentMask * vec4(CompSectionf);
 	
 	//gl_FragColor = vec4(SectionValue,SectionValue,SectionValue,SectionValue);
 	gl_FragColor = Output;
