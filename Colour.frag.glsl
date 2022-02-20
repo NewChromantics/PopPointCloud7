@@ -49,11 +49,13 @@ vec3 GetMapPosition(vec3 WorldPosition,out bool Inside)
 	return WorldUv;
 }
 
-const int YSectionsPerComponent = 5;
+const int YSectionsPerComponent = 7;
+const float YSectionsPerComponentf = float(YSectionsPerComponent);
 const int YSectionComponents = 4;
 #define YSectionCount	(YSectionsPerComponent*YSectionComponents)
+#define YSectionCountf	float(YSectionCount)
 
-#define WorldSectionSizeY	( ( OccupancyMapWorldMax.y - OccupancyMapWorldMin.y ) / float(YSectionCount) )
+#define WorldSectionSizeY	( ( OccupancyMapWorldMax.y - OccupancyMapWorldMin.y ) / YSectionCountf )
 
 vec4 GetOccupancySample(vec3 WorldPosition,out float MapPositionYNormalised)
 {
@@ -70,36 +72,39 @@ vec4 GetOccupancySample(vec3 WorldPosition,out float MapPositionYNormalised)
 	return OccupancyData;
 }
 
-float GetSectionValue(int Section)
+float GetSectionValue(float Section)
 {
 	//	pow(10,0)==1 ??
-	return pow( 10.0, float(Section) );
-	if ( Section == 0 )		return 1.0;
-	if ( Section == 1 )		return 10.0;
-	if ( Section == 2 )		return 100.0;
-	if ( Section == 3 )		return 1000.0;
-	if ( Section == 4 )		return 10000.0;
-	if ( Section == 5 )		return 100000.0;
-	if ( Section == 6 )		return 1000000.0;
-	if ( Section == 7 )		return 10000000.0;
-	if ( Section == 8 )		return 100000000.0;
-	if ( Section == 9 )		return 1000000000.0;
-	if ( Section == 10 )	return 10000000000.0;
-	if ( Section == 11 )	return 100000000000.0;
+	return pow( 10.0, Section );
+	if ( Section == 0.0 )		return 1.0;
+	if ( Section == 1.0 )		return 10.0;
+	if ( Section == 2.0 )		return 100.0;
+	if ( Section == 3.0 )		return 1000.0;
+	if ( Section == 4.0 )		return 10000.0;
+	if ( Section == 5.0 )		return 100000.0;
+	if ( Section == 6.0 )		return 1000000.0;
+	if ( Section == 7.0 )		return 10000000.0;
+	if ( Section == 8.0 )		return 100000000.0;
+	if ( Section == 9.0 )		return 1000000000.0;
+	if ( Section == 10.0 )	return 10000000000.0;
+	if ( Section == 11.0 )	return 100000000000.0;
 	return 0.0;
 }
 
-bool HasHitInOccupancyData(vec4 OccupancyData,int Section)
+bool HasHitInOccupancyData(vec4 OccupancyData,float Section)
 {
-	int Component = int(Section) / YSectionsPerComponent;
-	float CompSection = mod( float(Section), float(YSectionsPerComponent) );
-	float CompSectionValue = GetSectionValue(int(CompSection));
+	float Component = floor( Section / YSectionsPerComponentf );
+	float CompSection = mod( Section, YSectionsPerComponentf );
+	float CompSectionValue = GetSectionValue( CompSection );
 	
-	float Data = 0.0;
-	Data += ( Component == 0) ? OccupancyData.x : 0.0;
-	Data += ( Component == 1) ? OccupancyData.y : 0.0;
-	Data += ( Component == 2) ? OccupancyData.z : 0.0;
-	Data += ( Component == 3) ? OccupancyData.w : 0.0;
+	vec4 ComponentMask = vec4( Component==0.0, Component==1.0, Component==2.0, Component==3.0 );
+	OccupancyData *= ComponentMask;
+	float Data = OccupancyData.x + OccupancyData.y + OccupancyData.z + OccupancyData.w;
+	//float Data = 0.0;
+	//Data += (Component == 0.0) ? OccupancyData.x : 0.0;
+	//Data += (Component == 1.0) ? OccupancyData.y : 0.0;
+	//Data += (Component == 2.0) ? OccupancyData.z : 0.0;
+	//Data += (Component == 3.0) ? OccupancyData.w : 0.0;
 	
 	//	turn 400000 into 4 into != 0
 	Data = floor( Data / CompSectionValue );
@@ -109,7 +114,7 @@ bool HasHitInOccupancyData(vec4 OccupancyData,int Section)
 	return Data >= 0.99;
 }	
 
-#define MaxShadowDistance	(0.7)
+#define MaxShadowDistance	(1.0)
 
 float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 {
@@ -118,23 +123,23 @@ float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 	vec4 OccupancyData = GetOccupancySample(WorldPosition,MapYNormalised);
 
 	//	from blit occupancy frag
-	float Section = floor(MapYNormalised * float(YSectionCount) );
+	float Section = floor(MapYNormalised * YSectionCountf );
 	
 	//	walk upwards until we hit data
-	for ( int TestSection=0;	TestSection<YSectionCount;	TestSection++ )
+	for ( float TestSection=0.0;	TestSection<YSectionCountf;	TestSection++ )
 	{
-		if ( TestSection <= int(Section) )
+		if ( TestSection <= Section )
 			continue;
 			
 		//	is there data here
 		bool Hit = HasHitInOccupancyData( OccupancyData, TestSection );
-		if ( Hit )
-		{
-			float SectionsAway = float(TestSection) - Section;
-			float DistanceAway = WorldSectionSizeY * SectionsAway;
-			float Strength = 1.0 - clamp( DistanceAway / MaxShadowDistance, 0.0, 1.0 );
-			return Strength;
-		}
+		if ( !Hit )
+			continue;
+
+		float SectionsAway = TestSection - Section;
+		float DistanceAway = WorldSectionSizeY * SectionsAway;
+		float Strength = 1.0 - min( DistanceAway / MaxShadowDistance, 1.0 );
+		return Strength;
 	}
 	return 0.0;
 }

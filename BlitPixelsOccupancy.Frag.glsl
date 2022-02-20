@@ -19,7 +19,6 @@ float GetSectionValue(int Section)
 	//	pow(10,0)==1 ??
 	//return pow( 10.0, float(Section) );
 	if ( Section == 0 )		return 1.0;
-	if ( Section == 0 )		return 1.0;
 	if ( Section == 1 )		return 10.0;
 	if ( Section == 2 )		return 100.0;
 	if ( Section == 3 )		return 1000.0;
@@ -33,7 +32,7 @@ float GetSectionValue(int Section)
 	if ( Section == 11 )	return 100000000000.0;
 }
 
-const int YSectionsPerComponent = 5;
+const int YSectionsPerComponent = 7;
 const int YSectionComponents = 4;
 #define YSectionCount	(YSectionsPerComponent*YSectionComponents)
 

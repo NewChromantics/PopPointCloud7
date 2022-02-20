@@ -36,7 +36,7 @@ const OccupancyTextureHeight = 128;
 const OccupancyMapSize = 
 {
 	WorldMin:[-7,-0.1,0],
-	WorldMax:[4,2,-10],
+	WorldMax:[4,2,-6],
 };
 
 async function CreateCubeTriangleBuffer(RenderContext)
@@ -224,7 +224,7 @@ function GetBoundingBoxesFromOccupancy(OccupancyTexture)
 		OccupancyMapSize.WorldMax[1] - OccupancyMapSize.WorldMin[1],
 		OccupancyMapSize.WorldMax[2] - OccupancyMapSize.WorldMin[2],
 	];
-	const YSectionsPerComponent = 5;
+	const YSectionsPerComponent = 7;
 	const YSectionComponents = 4;
 	const YSectionCount = (YSectionsPerComponent*YSectionComponents);
 
