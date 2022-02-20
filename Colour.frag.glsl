@@ -75,7 +75,7 @@ vec4 GetOccupancySample(vec3 WorldPosition,out float MapPositionYNormalised)
 float GetSectionValue(float Section)
 {
 	//	pow(10,0)==1 ??
-	return pow( 10.0, Section );
+	//return pow( 10.0, Section );
 	if ( Section == 0.0 )		return 1.0;
 	if ( Section == 1.0 )		return 10.0;
 	if ( Section == 2.0 )		return 100.0;
