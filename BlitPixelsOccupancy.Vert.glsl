@@ -9,7 +9,7 @@ varying vec2 FragPixelPosition;
 
 uniform sampler2D PositionsTexture;
 
-varying vec4 OutputColour;
+varying float MapYNormalised;
 
 uniform vec3 OccupancyMapWorldMin;
 uniform vec3 OccupancyMapWorldMax;
@@ -32,17 +32,15 @@ float Range01(float Min,float Max,float Value)
 }
 
 
-vec3 GetMapPxzY(vec3 WorldPosition)
+vec3 GetMapPosition(vec3 WorldPosition)
 {
 	vec3 WorldUv;
 	WorldUv.x = Range01( OccupancyMapWorldMin.x, OccupancyMapWorldMax.x, WorldPosition.x );
 	WorldUv.y = Range01( OccupancyMapWorldMin.y, OccupancyMapWorldMax.y, WorldPosition.y );
 	WorldUv.z = Range01( OccupancyMapWorldMin.z, OccupancyMapWorldMax.z, WorldPosition.z );
-	
-	vec2 MapPxz = floor( WorldUv.xz * OutputTextureSize );
-	float MapY = WorldUv.y;// * 255.0;
-	return vec3( MapPxz, MapY );
+	return WorldUv;
 }
+
 
 void main()
 {
@@ -52,15 +50,18 @@ void main()
 	//	TexCoord is quad-space
 	vec2 TexelSize = vec2(1) / OutputTextureSize;
 	
-	vec3 MapPxzY = GetMapPxzY(WorldPosition);
-	vec2 Uv = MapPxzY.xy * TexelSize;
-	Uv += TexCoord * TexelSize;
+	//	normalised map pos
+	vec3 MapPosition = GetMapPosition(WorldPosition);
+	vec2 MapPx = floor( MapPosition.xz * OutputTextureSize );
+	vec2 MapUv = MapPx * TexelSize;
+	//	make it square
+	MapUv += TexCoord * TexelSize;
 	
-	gl_Position.xy = mix( vec2(-1,-1), vec2(1,1), Uv );
+	gl_Position.xy = mix( vec2(-1,-1), vec2(1,1), MapUv );
 	gl_Position.z = 0.0;
 	gl_Position.w = 1.0;
 	
-	OutputColour = vec4(MapPxzY.z);
+	MapYNormalised = MapPosition.y;
 	
 	FragPixelPosition = PixelPosition;
 }

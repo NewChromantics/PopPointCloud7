@@ -81,7 +81,7 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	//	too slow?
 	State.DepthWrite = true;
 	State.DepthRead = false;
-	State.BlendMode = 'Max';
+	State.BlendMode = 'ExplicitAdd';
 	
 	const DrawPixels = ['Draw',Geo,Shader,Uniforms,State];
 	

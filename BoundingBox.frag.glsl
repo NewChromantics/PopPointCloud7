@@ -33,8 +33,11 @@ void main()
 {
 	float u = Range( BorderWidth, 1.0 - BorderWidth, FragLocalUv.x ); 
 	float v = Range( BorderWidth, 1.0 - BorderWidth, FragLocalUv.y );
-	//if ( u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0 )
-	//	discard; 
+	if ( u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0 )
+	{
+	}
+	else
+		discard; 
 	
 	gl_FragColor = vec4(FragLocalUv,0,1.0);
 }

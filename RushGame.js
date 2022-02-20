@@ -21,16 +21,18 @@ const CubeVelocityStretch = 5.0;
 const FloorColour = [196, 64, 24,255].map(x=>x/255);
 const RenderFloor = false;
 
-const RenderDebugQuads = false;	//	need to avoid in xr
+const RenderDebugQuads = true;	//	need to avoid in xr
 const DebugQuadTilesx = 10;
 const DebugQuadTilesy = 10;
 
+const RenderOctree = true;
+const RenderOctreeInvalid = false;
 const OccupancyTextureWidth = 128;
 const OccupancyTextureHeight = 128;
 const OccupancyMapSize = 
 {
-	WorldMin:[-7,-1,0],
-	WorldMax:[4,3,-10],
+	WorldMin:[-7,0,0],
+	WorldMax:[4,2,-10],
 };
 
 async function CreateCubeTriangleBuffer(RenderContext)
@@ -218,25 +220,58 @@ function GetBoundingBoxesFromOccupancy(OccupancyTexture)
 		OccupancyMapSize.WorldMax[1] - OccupancyMapSize.WorldMin[1],
 		OccupancyMapSize.WorldMax[2] - OccupancyMapSize.WorldMin[2],
 	];
-	let MapPixelStep = [1/w,1,1/h];
+	const YSectionsPerComponent = 5;
+	const YSectionComponents = 4;
+	const YSectionCount = (YSectionsPerComponent*YSectionComponents);
+
+	let MapPixelStep = [1/w,1/YSectionCount,1/h];
 	MapPixelStep[0] *= MapWorldSize[0];
 	MapPixelStep[1] *= MapWorldSize[1];
 	MapPixelStep[2] *= MapWorldSize[2];
-	function DecodeRgba(px,py,rgba)
+	
+	function GetBoundingBox(px,py,YBit)
 	{
-		let MaxYWritten = rgba[0];
-		//if ( MaxYWritten <= 0 )	return null;
 		let u = px / w;
 		let v = py / h;
-		let yf = MaxYWritten / 255;
+		let yf = YBit / YSectionCount;
 		let x = Lerp( OccupancyMapSize.WorldMin[0], OccupancyMapSize.WorldMax[0], u ); 
 		let y = Lerp( OccupancyMapSize.WorldMin[1], OccupancyMapSize.WorldMax[1], yf ); 
 		let z = Lerp( OccupancyMapSize.WorldMin[2], OccupancyMapSize.WorldMax[2], v );
 		const Box = {};
 		Box.Min = [x,y,z];
 		Box.Size = MapPixelStep.slice();
-		Box.Size[1] = 0.10;
+		//Box.Size[1] = 0.10;
 		return Box;
+	}
+	
+	function DecodeRgbaToBoundingBoxes(px,py,rgba)
+	{
+		const Boxs = [];
+		
+		for ( let SectionComponent=0;	SectionComponent<YSectionComponents;	SectionComponent++ )
+		{
+			for ( let CompSection=0;	CompSection<YSectionsPerComponent;	CompSection++ )
+			{
+				//	old bitfield
+				//const Set = YBitfield & (1<<b);
+				//	new section'd x10
+				//	b=0 is 1+1+1+1 etc
+				//	b=1 is 10+10+10
+				const YBitfield = rgba[SectionComponent];
+				let SectionValue = Math.pow(10,CompSection);
+				let HitsInSection = Math.floor( YBitfield / SectionValue ) % 10;
+				const Set = (HitsInSection>0);
+				const SectionIndex = (SectionComponent*YSectionsPerComponent) + CompSection;
+				const b = SectionIndex;
+				
+				if ( !Set )
+					continue;
+				
+				const Box = GetBoundingBox(px,py,b);
+				Boxs.push(Box);
+			}
+		}
+		return Boxs;
 	}
 		
 	
@@ -246,8 +281,8 @@ function GetBoundingBoxesFromOccupancy(OccupancyTexture)
 		const pi = i / Channels;
 		const x = pi % w;
 		const y = Math.floor( pi / w );
-		const Box = DecodeRgba( x, y, Rgba );
-		BoundingBoxes.push(Box);
+		const Boxs = DecodeRgbaToBoundingBoxes( x, y, Rgba );
+		BoundingBoxes.push(...Boxs);
 	}
 
 	BoundingBoxes = BoundingBoxes.filter( b => b!=null );
@@ -1111,9 +1146,9 @@ class Game_t
 			this.OccupancyTexture = new Pop.Image();
 			const w = OccupancyTextureWidth;
 			const h = OccupancyTextureHeight;
-			let rgba = new Array(w*h).fill([0,255,0,255]);
-			rgba = new Uint8Array(rgba.flat(2));
-			this.OccupancyTexture.WritePixels(w,h,rgba,'RGBA');
+			let rgba = new Array(w*h).fill([0,0,0,0]);
+			rgba = new Float32Array(rgba.flat(2));
+			this.OccupancyTexture.WritePixels(w,h,rgba,'Float4');
 		}
 		try
 		{
@@ -1469,7 +1504,6 @@ export default class App_t
 			DebugTextures.forEach( Render );
 		}
 
-		const RenderOctree = true;
 		if ( RenderOctree )
 		{
 			const BoundingBoxes = GetBoundingBoxesFromOccupancy(this.Game.OccupancyTexture);

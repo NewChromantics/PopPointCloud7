@@ -1,12 +1,83 @@
 precision highp float;
 
-varying vec4 OutputColour;
+varying float MapYNormalised;
 
+//	output gets added together
+//	but we need to write all of them in order to get a "bit" each
+//	so we will section up the values so we can add 2 of the same Y together
+//	so 
+//		bit0 is 1	+1+1+1+1
+//		bit1 is 10		+10+10+10
+//		bit2 is 100		+100+100+100
+//	this limits the number of objects in the same XZ & Y to 10
+//	before it overflows into the next section....
+//	we can probably live with this.
+//	we could write to a u32 texture, but its rarely supported, so 
+//	writing to float and errr, trial&error until we find where data gets screwed up
+float GetSectionValue(int Section)
+{
+	//	pow(10,0)==1 ??
+	//return pow( 10.0, float(Section) );
+	if ( Section == 0 )		return 1.0;
+	if ( Section == 0 )		return 1.0;
+	if ( Section == 1 )		return 10.0;
+	if ( Section == 2 )		return 100.0;
+	if ( Section == 3 )		return 1000.0;
+	if ( Section == 4 )		return 10000.0;
+	if ( Section == 5 )		return 100000.0;
+	if ( Section == 6 )		return 1000000.0;
+	if ( Section == 7 )		return 10000000.0;
+	if ( Section == 8 )		return 100000000.0;
+	if ( Section == 9 )		return 1000000000.0;
+	if ( Section == 10 )	return 10000000000.0;
+	if ( Section == 11 )	return 100000000000.0;
+}
+
+const int YSectionsPerComponent = 5;
+const int YSectionComponents = 4;
+#define YSectionCount	(YSectionsPerComponent*YSectionComponents)
 
 void main()
 {
-	gl_FragColor = OutputColour;
+	float Section = floor(MapYNormalised * float(YSectionCount) );
+	Section = clamp( Section, 0.0, float(YSectionCount-1) );
 	
-	//gl_FragColor.xyz = mix( vec3(0,1,0), vec3(0,0,1), OutputColour.y );
+	int Component = int(Section) / YSectionsPerComponent;
+	float CompSection = mod( Section, float(YSectionsPerComponent) );
+	
+	float CompSectionf = GetSectionValue( int(CompSection) );
+	
+	vec4 Output = vec4(0,0,0,0);
+	if ( Component == 0 )	Output.x = CompSectionf;
+	if ( Component == 1 )	Output.y = CompSectionf;
+	if ( Component == 2 )	Output.z = CompSectionf;
+	if ( Component == 3 )	Output.w = CompSectionf;
+	
+	//gl_FragColor = vec4(SectionValue,SectionValue,SectionValue,SectionValue);
+	gl_FragColor = Output;
+
+	
+	//	colour is going to be OR'd (via add)
+	//	so it needs to be a bit representing Y
+	//	todo: 4x8bit encoding
+	/*
+	int Range = 4 * 8;
+	int Bit = int(floor(MapYNormalised * Range));
+	
+	int Bit0 = (Bit < 8) ? Bit - 0 : 0;
+	int Bit1 = (Bit < 16) ? Bit - 8 : 0;
+	int Bit2 = (Bit < 24) ? Bit - 16 : 0;
+	int Bit3 = (Bit < 32) ? Bit - 24 : 0;
+	
+	float Bit0f = Bit0 / 255.0;
+	
+	gl_FragColor = vec4(Bitf,Bitf,Bitf,Bitf);
+	int Range = 8;
+	float Bit = floor(MapYNormalised * float(Range));
+
+	float Byte = pow(2.0,Bit);//1 << Bit;
+	float Bytef = Byte / 255.0;
+	gl_FragColor = vec4(Bytef,Bytef,Bytef,Bytef);
+	*/
 }
 
