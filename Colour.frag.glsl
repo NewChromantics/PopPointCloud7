@@ -123,23 +123,43 @@ float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 	vec4 OccupancyData = GetOccupancySample(WorldPosition,MapYNormalised);
 
 	//	from blit occupancy frag
-	float Section = floor(MapYNormalised * YSectionCountf );
+	float ThisSection = floor(MapYNormalised * YSectionCountf );
 	
-	//	walk upwards until we hit data
-	for ( float TestSection=0.0;	TestSection<YSectionCountf;	TestSection++ )
-	{
-		if ( TestSection <= Section )
-			continue;
-			
-		//	is there data here
-		bool Hit = HasHitInOccupancyData( OccupancyData, TestSection );
-		if ( !Hit )
-			continue;
+	float ThisComponent = floor( ThisSection / YSectionsPerComponentf );
+	float ThisCompSection = mod( ThisSection, YSectionsPerComponentf );
+	float ThisCompSectionValue = GetSectionValue( ThisCompSection );
 
-		float SectionsAway = TestSection - Section;
-		float DistanceAway = WorldSectionSizeY * SectionsAway;
-		float Strength = 1.0 - min( DistanceAway / MaxShadowDistance, 1.0 );
-		return Strength;
+	//	clear all the data below us
+	OccupancyData.x *= (ThisComponent>0.0) ? 0.0 : 1.0;
+	OccupancyData.y *= (ThisComponent>1.0) ? 0.0 : 1.0;
+	OccupancyData.z *= (ThisComponent>2.0) ? 0.0 : 1.0;
+	OccupancyData.w *= (ThisComponent>3.0) ? 0.0 : 1.0;
+	//	clear the data in the component we're in, below us
+	//	todo: merge with above via *= 1/v
+	OccupancyData.x /= (ThisComponent==0.0) ? ThisCompSectionValue*10.0 : 1.0;
+	OccupancyData.y /= (ThisComponent==1.0) ? ThisCompSectionValue*10.0 : 1.0;
+	OccupancyData.z /= (ThisComponent==2.0) ? ThisCompSectionValue*10.0 : 1.0;
+	OccupancyData.w /= (ThisComponent==3.0) ? ThisCompSectionValue*10.0 : 1.0;
+	
+	for ( int TestComp=0;	TestComp<YSectionComponents;	TestComp++ )
+	{
+		float ComponentValue = floor(OccupancyData[TestComp]);
+		
+		for ( float TestSection=0.0;	TestSection<YSectionsPerComponentf;	TestSection++ )
+		{
+			if ( ComponentValue <= 0.0 )
+				break;
+			float Hits = mod( ComponentValue, 10.0 );
+			if ( Hits > 0.0 )
+			{
+				float SectionsAway = TestSection + (float(TestComp)*YSectionsPerComponentf);
+				SectionsAway -= ThisSection;
+				float DistanceAway = WorldSectionSizeY * SectionsAway;
+				float Strength = 1.0 - min( DistanceAway / MaxShadowDistance, 1.0 );
+				return Strength;
+			}
+			ComponentValue = floor(ComponentValue/10.0);
+		}
 	}
 	return 0.0;
 }
