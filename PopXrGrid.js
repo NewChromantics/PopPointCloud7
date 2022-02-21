@@ -70,7 +70,8 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 	
 	while ( RenderView )
 	{
-		const GpuTickFps = 30;
+		//	this is capping desktop when 30... quest is just 40 (as we're not wait for an animationframe?)
+		const GpuTickFps = 60;
 		const MinWaitPromise = Pop.Yield(1000/GpuTickFps);
 		
 		//	only intermediately render if xr is running
