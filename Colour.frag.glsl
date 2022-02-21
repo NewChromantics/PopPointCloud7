@@ -57,6 +57,17 @@ const int YSectionComponents = 4;
 
 #define WorldSectionSizeY	( ( OccupancyMapWorldMax.y - OccupancyMapWorldMin.y ) / YSectionCountf )
 
+#define ShadowSamplePositionOffset	0.04	
+#define MinShadowDistance		(0.0)
+#define MaxShadowDistance		(1.0)
+//	how much to Light*= depending on shadow strength
+#define ShadowLightMultMin		(1.0)
+#define ShadowLightMultMax		(0.2)
+const vec3 LightWorldPosition = vec3(1,10,0);
+#define APPLY_PHONG_LIGHTING	true
+#define GENERATE_ADDITIONAL_SHADOW	false
+
+
 vec4 GetOccupancySample(vec3 WorldPosition,out float MapPositionYNormalised)
 {
 	bool Inside;
@@ -114,7 +125,6 @@ bool HasHitInOccupancyData(vec4 OccupancyData,float Section)
 	return Data >= 0.99;
 }	
 
-#define MaxShadowDistance	(1.0)
 
 float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 {
@@ -130,38 +140,51 @@ float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 	float ThisCompSectionValue = GetSectionValue( ThisCompSection );
 
 	//	clear all the data below us
-	OccupancyData.x *= (ThisComponent>0.0) ? 0.0 : 1.0;
-	OccupancyData.y *= (ThisComponent>1.0) ? 0.0 : 1.0;
-	OccupancyData.z *= (ThisComponent>2.0) ? 0.0 : 1.0;
-	OccupancyData.w *= (ThisComponent>3.0) ? 0.0 : 1.0;
+	vec4 OccupancyMask = vec4( ThisComponent<=0.0, ThisComponent<=1.0, ThisComponent<=2.0, ThisComponent<=3.0 );
+	OccupancyData *= OccupancyMask;
+	//OccupancyData.x *= (ThisComponent>0.0) ? 0.0 : 1.0;
+	//OccupancyData.y *= (ThisComponent>1.0) ? 0.0 : 1.0;
+	//OccupancyData.z *= (ThisComponent>2.0) ? 0.0 : 1.0;
+	//OccupancyData.w *= (ThisComponent>3.0) ? 0.0 : 1.0;
 	//	clear the data in the component we're in, below us
 	//	todo: merge with above via *= 1/v
-	OccupancyData.x /= (ThisComponent==0.0) ? ThisCompSectionValue*10.0 : 1.0;
-	OccupancyData.y /= (ThisComponent==1.0) ? ThisCompSectionValue*10.0 : 1.0;
-	OccupancyData.z /= (ThisComponent==2.0) ? ThisCompSectionValue*10.0 : 1.0;
-	OccupancyData.w /= (ThisComponent==3.0) ? ThisCompSectionValue*10.0 : 1.0;
+	//vec4 OccupanyReduce = OccupancyMask * vec4( (ThisCompSectionValue*10.0)-1.0 );
+	//OccupancyData /= OccupanyReduce + vec4(1.0);
+	/*
+	OccupancyData.x *= (ThisComponent==0.0) ? 1.0/(ThisCompSectionValue*10.0) : 1.0;	//	*10 to go one section up
+	OccupancyData.y *= (ThisComponent==1.0) ? 1.0/(ThisCompSectionValue*10.0) : 1.0;
+	OccupancyData.z *= (ThisComponent==2.0) ? 1.0/(ThisCompSectionValue*10.0) : 1.0;
+	OccupancyData.w *= (ThisComponent==3.0) ? 1.0/(ThisCompSectionValue*10.0) : 1.0;
+	*/
 	
+	float LowestHitSection = 9999.0;
 	for ( int TestComp=0;	TestComp<YSectionComponents;	TestComp++ )
 	{
 		float ComponentValue = floor(OccupancyData[TestComp]);
+		if ( ComponentValue <= 0.0 )	//	skip whole section
+			continue;
 		
 		for ( float TestSection=0.0;	TestSection<YSectionsPerComponentf;	TestSection++ )
 		{
-			if ( ComponentValue <= 0.0 )
+			//	breaks good on cpu, bad on gpu?
+			if ( ComponentValue <= 0.0 )	//	skip whole section
 				break;
-			float Hits = mod( ComponentValue, 10.0 );
-			if ( Hits > 0.0 )
-			{
-				float SectionsAway = TestSection + (float(TestComp)*YSectionsPerComponentf);
-				SectionsAway -= ThisSection;
-				float DistanceAway = WorldSectionSizeY * SectionsAway;
-				float Strength = 1.0 - min( DistanceAway / MaxShadowDistance, 1.0 );
-				return Strength;
-			}
+			if ( LowestHitSection < 9999.0 )	//	already hit
+				break;
+				
+			float SectionIndex = TestSection + (float(TestComp)*YSectionsPerComponentf);
+			bool IsAbove = (SectionIndex > ThisSection);
+			float Hits = ( IsAbove && ComponentValue > 0.0) ? mod( ComponentValue, 10.0 ) : 0.0;
+			float HitDistance = ( Hits > 0.0 ) ? SectionIndex : 9999.0;
+			LowestHitSection = min( LowestHitSection, HitDistance );
 			ComponentValue = floor(ComponentValue/10.0);
 		}
 	}
-	return 0.0;
+	
+	float SectionsAway = LowestHitSection - ThisSection;
+	float DistanceAway = WorldSectionSizeY * SectionsAway;
+	float Strength = Range01( MaxShadowDistance, MinShadowDistance, DistanceAway );
+	return Strength;
 }
 
 
@@ -227,11 +250,12 @@ float Fresnel(vec3 eyeVector, vec3 worldNormal)
 	return pow( 1.0 + dot( eyeVector, worldNormal), FresnelFactor );
 }
 
-const vec3 LightWorldPosition = vec3(1,10,0);
-
 
 float PhongLightFactor()
 {
+	if ( !APPLY_PHONG_LIGHTING )
+		return 0.6;
+	
 	//	Y is backwards here...
 	vec3 DirToLight = normalize(LightWorldPosition - FragWorldPosition);
 	float Dot = dot( FragWorldNormal, DirToLight );
@@ -239,14 +263,13 @@ float PhongLightFactor()
 	return Dot;
 }
 
-#define GENERATE_ADDITIONAL_SHADOW	false
 
 vec3 ApplyLighting(vec3 Colour)
 {
 	float Light = PhongLightFactor();
 	
 	//	sample just a tiny bit away from the surface
-	vec3 ShadowSamplePosition = FragWorldPosition + (FragWorldNormal*0.015);
+	vec3 ShadowSamplePosition = FragWorldPosition + (FragWorldNormal*ShadowSamplePositionOffset);
 	float Shadow = GetOccupancyMapShadowFactor( ShadowSamplePosition );
 	
 	if ( GENERATE_ADDITIONAL_SHADOW )
@@ -257,7 +280,7 @@ vec3 ApplyLighting(vec3 Colour)
 		float ZFactor = dot( FragWorldNormal, vec3(0,0,1) );
 		float XFactor = dot( FragWorldNormal, vec3(1,0,0) );
 		float StepAway = 0.14;	//	should probably be an occupany map-away
-		vec3 Left = cross( FragWorldNormal, vec3(0,1,0) ) * StepAway;
+		vec3 Left = cross( FragWorldNormal, vec3(0,-1,0) ) * StepAway;
 		vec3 Right = -Left;
 		vec3 Forward = FragWorldNormal * StepAway;
 		float Shadow0 = GetOccupancyMapShadowFactor( FragWorldPosition + Forward + Left );
@@ -272,7 +295,7 @@ vec3 ApplyLighting(vec3 Colour)
 	{
 		Shadow *= 1.4;
 	}
-	Light *= 1.0 - Shadow;
+	Light *= mix( ShadowLightMultMin, ShadowLightMultMax, Shadow );
 	Light = clamp( Light, 0.0, 1.0 );
 
 	vec3 DarkColour = Colour - vec3(0.5);	
