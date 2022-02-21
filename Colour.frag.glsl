@@ -67,6 +67,8 @@ const vec3 LightWorldPosition = vec3(1,10,0);
 #define APPLY_PHONG_LIGHTING	true
 #define GENERATE_ADDITIONAL_SHADOW	false
 
+//	faster version but hard shadow only
+#define SHADOW_ANY_ABOVE		true
 
 vec4 GetOccupancySample(vec3 WorldPosition,out float MapPositionYNormalised)
 {
@@ -126,6 +128,7 @@ bool HasHitInOccupancyData(vec4 OccupancyData,float Section)
 }	
 
 
+
 float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 {
 	//	get our position in the occupancy map
@@ -142,49 +145,53 @@ float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 	//	clear all the data below us
 	vec4 OccupancyMask = vec4( ThisComponent<=0.0, ThisComponent<=1.0, ThisComponent<=2.0, ThisComponent<=3.0 );
 	OccupancyData *= OccupancyMask;
-	//OccupancyData.x *= (ThisComponent>0.0) ? 0.0 : 1.0;
-	//OccupancyData.y *= (ThisComponent>1.0) ? 0.0 : 1.0;
-	//OccupancyData.z *= (ThisComponent>2.0) ? 0.0 : 1.0;
-	//OccupancyData.w *= (ThisComponent>3.0) ? 0.0 : 1.0;
-	//	clear the data in the component we're in, below us
-	//	todo: merge with above via *= 1/v
-	//vec4 OccupanyReduce = OccupancyMask * vec4( (ThisCompSectionValue*10.0)-1.0 );
-	//OccupancyData /= OccupanyReduce + vec4(1.0);
-	/*
-	OccupancyData.x *= (ThisComponent==0.0) ? 1.0/(ThisCompSectionValue*10.0) : 1.0;	//	*10 to go one section up
-	OccupancyData.y *= (ThisComponent==1.0) ? 1.0/(ThisCompSectionValue*10.0) : 1.0;
-	OccupancyData.z *= (ThisComponent==2.0) ? 1.0/(ThisCompSectionValue*10.0) : 1.0;
-	OccupancyData.w *= (ThisComponent==3.0) ? 1.0/(ThisCompSectionValue*10.0) : 1.0;
-	*/
-	
-	float LowestHitSection = 9999.0;
-	for ( int TestComp=0;	TestComp<YSectionComponents;	TestComp++ )
+
+	if ( SHADOW_ANY_ABOVE )
 	{
-		float ComponentValue = floor(OccupancyData[TestComp]);
-		if ( ComponentValue <= 0.0 )	//	skip whole section
-			continue;
-		
-		for ( float TestSection=0.0;	TestSection<YSectionsPerComponentf;	TestSection++ )
-		{
-			//	breaks good on cpu, bad on gpu?
-			if ( ComponentValue <= 0.0 )	//	skip whole section
-				break;
-			if ( LowestHitSection < 9999.0 )	//	already hit
-				break;
-				
-			float SectionIndex = TestSection + (float(TestComp)*YSectionsPerComponentf);
-			bool IsAbove = (SectionIndex > ThisSection);
-			float Hits = ( IsAbove && ComponentValue > 0.0) ? mod( ComponentValue, 10.0 ) : 0.0;
-			float HitDistance = ( Hits > 0.0 ) ? SectionIndex : 9999.0;
-			LowestHitSection = min( LowestHitSection, HitDistance );
-			ComponentValue = floor(ComponentValue/10.0);
-		}
-	}
+		//	clear component data in our component, below us
+		OccupancyData.x /= (ThisComponent==0.0) ? (ThisCompSectionValue*10.0) : 1.0;	//	*10 to go one section up
+		OccupancyData.y /= (ThisComponent==1.0) ? (ThisCompSectionValue*10.0) : 1.0;
+		OccupancyData.z /= (ThisComponent==2.0) ? (ThisCompSectionValue*10.0) : 1.0;
+		OccupancyData.w /= (ThisComponent==3.0) ? (ThisCompSectionValue*10.0) : 1.0;
+		OccupancyData = floor(OccupancyData);
 	
-	float SectionsAway = LowestHitSection - ThisSection;
-	float DistanceAway = WorldSectionSizeY * SectionsAway;
-	float Strength = Range01( MaxShadowDistance, MinShadowDistance, DistanceAway );
-	return Strength;
+		float AnyShadow = OccupancyData.x + OccupancyData.y + OccupancyData.z + OccupancyData.w;
+		if ( AnyShadow >= 1.0 )
+			return 1.0;
+		else
+			return 0.0;
+	}
+	else
+	{
+		float LowestHitSection = 9999.0;
+		for ( int TestComp=0;	TestComp<YSectionComponents;	TestComp++ )
+		{
+			float ComponentValue = floor(OccupancyData[TestComp]);
+			if ( ComponentValue <= 0.0 )	//	skip whole section
+				continue;
+			
+			for ( float TestSection=0.0;	TestSection<YSectionsPerComponentf;	TestSection++ )
+			{
+				//	breaks good on cpu, bad on gpu?
+				if ( ComponentValue <= 0.0 )	//	skip whole section
+					break;
+				if ( LowestHitSection < 9999.0 )	//	already hit
+					break;
+					
+				float SectionIndex = TestSection + (float(TestComp)*YSectionsPerComponentf);
+				bool IsAbove = (SectionIndex > ThisSection);
+				float Hits = ( IsAbove && ComponentValue > 0.0) ? mod( ComponentValue, 10.0 ) : 0.0;
+				float HitDistance = ( Hits > 0.0 ) ? SectionIndex : 9999.0;
+				LowestHitSection = min( LowestHitSection, HitDistance );
+				ComponentValue = floor(ComponentValue/10.0);
+			}
+		}
+		
+		float SectionsAway = LowestHitSection - ThisSection;
+		float DistanceAway = WorldSectionSizeY * SectionsAway;
+		float Strength = Range01( MaxShadowDistance, MinShadowDistance, DistanceAway );
+		return Strength;
+	}
 }
 
 
