@@ -64,6 +64,7 @@ const int YSectionComponents = 4;
 #define ShadowLightMultMin		(1.0)
 #define ShadowLightMultMax		(0.2)
 const vec3 LightWorldPosition = vec3(1,10,0);
+#define APPLY_SHADOW_LIGHTING	true
 #define APPLY_PHONG_LIGHTING	true
 #define GENERATE_ADDITIONAL_SHADOW	false
 
@@ -277,7 +278,9 @@ vec3 ApplyLighting(vec3 Colour)
 	
 	//	sample just a tiny bit away from the surface
 	vec3 ShadowSamplePosition = FragWorldPosition + (FragWorldNormal*ShadowSamplePositionOffset);
-	float Shadow = GetOccupancyMapShadowFactor( ShadowSamplePosition );
+	float Shadow = 0.0;
+	if ( APPLY_SHADOW_LIGHTING )
+		Shadow = GetOccupancyMapShadowFactor( ShadowSamplePosition );
 	
 	if ( GENERATE_ADDITIONAL_SHADOW )
 	{
