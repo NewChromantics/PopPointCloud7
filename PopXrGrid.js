@@ -52,7 +52,10 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 				const Device = await Pop.Xr.CreateDevice( RenderContext, GetXrRenderCommands, XrOnWaitForCallback );
 				App.BindXrControls( Device );
 
-				await Device.WaitForEnd();
+				const Enders = [Device.WaitForEnd(),App.WaitForUserExit()];
+				await Promise.any(Enders);
+				//	close xr device in case it was requested by app
+				Device.Close();
 			}
 			catch(e)
 			{

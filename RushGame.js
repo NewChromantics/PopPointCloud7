@@ -1313,9 +1313,15 @@ export default class App_t
 	{
 		this.RegisterAssets();
 		this.Game = new Game_t();
+		this.UserExitPromise = Pop.CreatePromise();
 	}
 	
 	get Camera()	{	return AppCamera;	}
+	
+	async WaitForUserExit()
+	{
+		return this.UserExitPromise;
+	}
 	
 	RegisterAssets()
 	{
@@ -1350,6 +1356,8 @@ export default class App_t
 	
 	BindXrControls(Device)
 	{
+		const ExitButtons = [4,5,'A','B','X','Y'];
+		
 		const Game = this.Game;
 		Device.OnMouseMove = function(xyz,Button,InputName,Transform,ExtraData)
 		{
@@ -1396,12 +1404,17 @@ export default class App_t
 		
 		Device.OnMouseDown = function(xyz,Button,InputName,Transform)
 		{
+			//	if user presses a face button exit app
+			if ( ExitButtons.includes(Button) )
+				this.UserExitPromise.Resolve();
+			//console.log(`button down ${Button}`);
+		
 			//	update position as move isn't called when mouse is down
 			Device.OnMouseMove( ...arguments );
 			
 			const Weapon = Game.GetWeapon(InputName);
 			Game.OnFireWeapon(Weapon);
-		}
+		}.bind(this);
 
 		Device.OnMouseUp = function(xyz,Button,InputName,Transform)
 		{
