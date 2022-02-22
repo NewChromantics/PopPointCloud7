@@ -104,8 +104,9 @@ function GetZeroArray(Length)
 
 let DebugQuadShader;
 let BlitCopyShader;
-let BlitUpdatePositions;
-let BlitUpdateVelocitys;
+let BlitUpdatePositionsShader;
+let BlitUpdateVelocitysShader;
+let BlitUpdateVelocitysAndPositionsShader;
 
 function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projectiles)
 {
@@ -123,7 +124,7 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projec
 	
 	let TexelSize = [1.0 / PositionTexture.GetWidth(),1.0 / PositionTexture.GetHeight()];
 	
-	//	copy old velocities to temp texture
+	//	copy old velocities
 	{
 		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
 		const Uniforms = {};
@@ -132,6 +133,19 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projec
 		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
 	}
 
+	//	copy old positions
+	{
+		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
+		const Uniforms = {};
+		Uniforms.SourceTexture = PositionTexture;
+		Commands.push(['SetRenderTarget',PreviousPositionsTexture]);
+		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
+	}
+	
+	
+	const UseMrt = true;
+	
+	
 	//	update velocitys texture
 	{
 		//	get projectile data
@@ -161,11 +175,12 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projec
 			const Projectile = UsefulProjectiles[Index];
 			return [...Projectile.PrevPosition,1];
 		}
-		const MAX_PROJECTILES = 100;
+		const MAX_PROJECTILES = 10;
 		let ProjectilePrevPos = new Array(MAX_PROJECTILES).fill(0).map( GetProjectilePrevPos );
 		let ProjectileNextPos = new Array(MAX_PROJECTILES).fill(0).map( GetProjectilePos );
 	
-		const UpdateVelocitysShader = AssetManager.GetAsset(BlitUpdateVelocitys,RenderContext);
+		const UpdateVelocitysShader = AssetManager.GetAsset(BlitUpdateVelocitysShader,RenderContext);
+		const UpdateVelocitysAndPositionsShader = AssetManager.GetAsset(BlitUpdateVelocitysAndPositionsShader,RenderContext);
 		const Uniforms = {};
 		Uniforms.ShapePositionsTexture = ShapePositionsTexture;
 		Uniforms.PreviousPositionsTexture = PreviousPositionsTexture;
@@ -177,20 +192,20 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projec
 		Uniforms.CubeSize = CubeSize;
 		Uniforms.Random4 = [Math.random(),Math.random(),Math.random(),Math.random()];
 		
-		Commands.push(['SetRenderTarget',VelocitysTexture]);
-		Commands.push(['Draw',BlitGeo,UpdateVelocitysShader,Uniforms,State]);
-	}
-
-	//	copy old positions to temp texture
-	{
-		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
-		const Uniforms = {};
-		Uniforms.SourceTexture = PositionTexture;
-		Commands.push(['SetRenderTarget',PreviousPositionsTexture]);
-		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
+		if ( UseMrt )
+		{
+			Commands.push(['SetRenderTarget',[VelocitysTexture,PositionTexture]]);
+			Commands.push(['Draw',BlitGeo,UpdateVelocitysAndPositionsShader,Uniforms,State]);
+		}
+		else
+		{
+			Commands.push(['SetRenderTarget',VelocitysTexture]);
+			Commands.push(['Draw',BlitGeo,UpdateVelocitysShader,Uniforms,State]);
+		}
 	}
 
 	//	update positions texture
+	if ( !UseMrt )
 	{
 		const UpdatePositionsShader = AssetManager.GetAsset(BlitUpdatePositions,RenderContext);
 		const Uniforms = {};
@@ -372,7 +387,7 @@ class VoxelBuffer_t
 		this.PositionsTextureUvs = new Float32Array(this.PositionsTextureUvs);
 		
 		let InitialPosition4s = ShapePosition4s.slice();
-		const StartAtZero = true;
+		const StartAtZero = false;
 		if ( StartAtZero )
 		{
 			function GetInitialPositon4(xxx,Index)
@@ -1326,8 +1341,9 @@ export default class App_t
 		{
 			const VertBlitQuadFilename = 'BlitQuad.vert.glsl';
 			BlitCopyShader = AssetManager.RegisterShaderAssetFilename('BlitCopy.frag.glsl',VertBlitQuadFilename);
-			BlitUpdatePositions = AssetManager.RegisterShaderAssetFilename('BlitUpdatePositions.frag.glsl',VertBlitQuadFilename);
-			BlitUpdateVelocitys = AssetManager.RegisterShaderAssetFilename('BlitUpdateVelocitys.frag.glsl',VertBlitQuadFilename);
+			BlitUpdatePositionsShader = AssetManager.RegisterShaderAssetFilename('BlitUpdatePositions.frag.glsl',VertBlitQuadFilename);
+			BlitUpdateVelocitysShader = AssetManager.RegisterShaderAssetFilename('BlitUpdateVelocitys.frag.glsl',VertBlitQuadFilename);
+			BlitUpdateVelocitysAndPositionsShader = AssetManager.RegisterShaderAssetFilename('BlitUpdateVelocitysAndPositions.frag.glsl',VertBlitQuadFilename);
 		}
 		DebugQuadShader = AssetManager.RegisterShaderAssetFilename('DebugQuad.frag.glsl','DebugQuad.vert.glsl');
 	}
