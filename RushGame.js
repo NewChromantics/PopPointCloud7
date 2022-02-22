@@ -207,7 +207,7 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projec
 	//	update positions texture
 	if ( !UseMrt )
 	{
-		const UpdatePositionsShader = AssetManager.GetAsset(BlitUpdatePositions,RenderContext);
+		const UpdatePositionsShader = AssetManager.GetAsset(BlitUpdatePositionsShader,RenderContext);
 		const Uniforms = {};
 		Uniforms.OldPositionsTexture = PreviousPositionsTexture;
 		Uniforms.VelocitysTexture = VelocitysTexture;
