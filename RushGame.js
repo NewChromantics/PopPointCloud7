@@ -945,6 +945,7 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,Cub
 
 	const State = {};
 	State.BlendMode = 'Blit';
+	//State.CullFacing = 'Back';
 	//State.DepthRead = false;
 		
 	const DrawCube = ['Draw',Geo,Shader,Uniforms,State];
@@ -983,6 +984,7 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 	
 	const State = {};
 	State.BlendMode = 'Blit';
+	//State.CullFacing = 'Back';
 	//State.DepthRead = false;
 		
 	const DrawCube = ['Draw',Geo,Shader,Uniforms,State];
