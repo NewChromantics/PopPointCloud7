@@ -314,73 +314,8 @@ vec3 ApplyLighting(vec3 Colour)
 
 void main()
 {
-	gl_FragColor.w = 1.0;
-	
-	#define HAS_DEPTH	false
-	if ( !HAS_DEPTH )
-	{
-		gl_FragColor = FragColour;
-		//gl_FragColor.xyz = vec3(0.6,0.7,0.7);
-		gl_FragColor.xyz = ApplyLighting( gl_FragColor.xyz );
-
-		return;
-	}
-	
-	vec4 BEHIND_COLOUR = vec4(1,0,0,0.1);
-	vec4 INFRONT_COLOUR = vec4(FragLocalUv,0,1);
-	/*
-	vec4 CameraWorldPosition4 = CameraToWorldTransform * vec4(0,0,0,1);
-	vec3 CameraWorldPosition = CameraWorldPosition4.xyz / CameraWorldPosition4.www;
-	vec3 SceneWorldPosition = GetSceneWorldPosition();
-	
-	float DistanceToFrag = length(WorldPosition-CameraWorldPosition);
-	float DistanceToRealWorld = length(SceneWorldPosition-CameraWorldPosition);
-	*/
-
-	float FragDistance = -FragCameraPosition.z;
-	float RealDistance = GetViewDepth();
-	gl_FragColor.xyz = vec3(FragDistance,0.0,RealDistance);
-	
-	if ( FragDistance < 0.001 )
-		gl_FragColor = vec4(1,1,0,1);
-	if ( FragDistance < 0.0 )
-		gl_FragColor = vec4(0,1,1,1);
-
-	if ( FragDistance < RealDistance )
-	{
-		gl_FragColor = INFRONT_COLOUR;
-		gl_FragColor.xyz *= RealDistance;
-	}
-	else
-	{
-		gl_FragColor = BEHIND_COLOUR;
-		gl_FragColor.xyz *= RealDistance;
-		discard;
-	}
-
-	/*
-	//	clipped by scene
-	//	gr: tolerance so we dont clip when rendering the scene test billboards
-	float Tolerance = 0.0001;
-	if ( SceneCameraPosition.z+Tolerance < CameraPosition.z )
-	{
-		gl_FragColor = vec4(1,0,0,1);
-		discard;
-		return;
-	}
-	
-	if ( WorldPosition
-
-	gl_FragColor = vec4( Colour.xyz, 1 );
-
-	if ( MuteColour )
-		gl_FragColor.xyz = Colour.xxx;
-	else if ( InvertColour )
-		gl_FragColor.xyz = Colour.zxy;
-	
-	float Depth = GetWorldDepth();
-	gl_FragColor.xyz = vec3(Depth,Depth,Depth);
-	*/
+	gl_FragColor = FragColour;
+	gl_FragColor.xyz = ApplyLighting( gl_FragColor.xyz );
 }
 
 
