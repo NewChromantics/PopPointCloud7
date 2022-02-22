@@ -175,7 +175,7 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projec
 			const Projectile = UsefulProjectiles[Index];
 			return [...Projectile.PrevPosition,1];
 		}
-		const MAX_PROJECTILES = 10;
+		const MAX_PROJECTILES = 100;
 		let ProjectilePrevPos = new Array(MAX_PROJECTILES).fill(0).map( GetProjectilePrevPos );
 		let ProjectileNextPos = new Array(MAX_PROJECTILES).fill(0).map( GetProjectilePos );
 	

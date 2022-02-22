@@ -18,7 +18,7 @@ const float FloorDragMin = 0.4;	//	less = more bounce
 const float FloorDragMax = 0.8;	//	less = more bounce
 const float GravityY = -16.0;
 
-#define MAX_PROJECTILES	10
+#define MAX_PROJECTILES	100
 //	projectile should probably be oldpos newpos to get force, pos, and not miss a fast projectile
 uniform vec4 ProjectilePrevPos[MAX_PROJECTILES];
 uniform vec4 ProjectileNextPos[MAX_PROJECTILES];
