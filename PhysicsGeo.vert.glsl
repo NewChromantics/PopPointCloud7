@@ -11,7 +11,7 @@ varying vec4 FragColour;
 varying vec3 FragLocalNormal;
 varying vec3 FragWorldNormal;
 
-#define LocalToWorldTransform GetLocalToWorldTransform()
+//#define LocalToWorldTransform GetLocalToWorldTransform()
 //attribute mat4 LocalToWorldTransform;
 attribute vec2 PhysicsPositionUv;
 //const vec2 PhysicsPositionUv = vec2(0,0);
@@ -51,7 +51,7 @@ vec3 GetWorldVelocity()
 	return Velocity4.xyz;
 }
 
-vec3 GetWorldPos()
+vec3 GetWorldPos(mat4 LocalToWorldTransform)
 {
 	vec4 WorldPos = LocalToWorldTransform * vec4(LocalPosition,1.0);
 	WorldPos.xyz /= WorldPos.www;
@@ -95,7 +95,9 @@ vec3 GetWorldPos()
 
 void main()
 {
-	vec3 WorldPos = GetWorldPos();
+	mat4 LocalToWorldTransform = GetLocalToWorldTransform();
+	
+	vec3 WorldPos = GetWorldPos(LocalToWorldTransform);
 	vec4 CameraPos = WorldToCameraTransform * vec4(WorldPos,1.0);	//	world to camera space
 	vec4 ProjectionPos = CameraProjectionTransform * CameraPos;
 
