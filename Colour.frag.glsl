@@ -1,5 +1,7 @@
+#version 300 es
 precision highp float;
-varying vec4 FragColour;
+in vec4 FragColour;
+out vec4 OutFragColor;
 
 uniform bool MuteColour;
 uniform bool InvertColour;
@@ -9,14 +11,14 @@ uniform mat4 NormalDepthToViewDepthTransform;
 uniform mat4 CameraToWorldTransform;
 uniform mat4 ProjectionToCameraTransform;
 
-varying vec3 FragWorldPosition;
-varying vec2 FragLocalUv;
-varying vec3 FragLocalPosition;
-varying vec2 FragViewUv;
-varying vec3 ClipPosition;
-varying vec3 FragWorldNormal;
+in vec3 FragWorldPosition;
+in vec2 FragLocalUv;
+in vec3 FragLocalPosition;
+in vec2 FragViewUv;
+in vec3 ClipPosition;
+in vec3 FragWorldNormal;
 
-varying vec3 FragCameraPosition;
+in vec3 FragCameraPosition;
 
 uniform sampler2D OccupancyMapTexture;
 uniform vec2 OccupancyMapTextureSize;
@@ -82,7 +84,7 @@ vec4 GetOccupancySample(vec3 WorldPosition,out float MapPositionYNormalised)
 	
 	MapPositionYNormalised = MapPosition.y;
 	
-	vec4 OccupancyData = texture2D( OccupancyMapTexture, MapUv );
+	vec4 OccupancyData = texture( OccupancyMapTexture, MapUv );
 	return OccupancyData;
 }
 
@@ -214,7 +216,7 @@ float GetViewDepth()
 	vec2 DepthUv = DepthUv4.xy;
 
 	
-	float Depth = texture2D( DepthTexture, DepthUv ).x;
+	float Depth = texture( DepthTexture, DepthUv ).x;
 	Depth *= ValueToMetres;
 	return Depth;
 }
@@ -227,7 +229,7 @@ vec3 GetSceneCameraPosition()
 	vec2 uv = (xy + 1.0 ) / 2.0;	//	0...1
 	
 	//	this depth needs to be normalised to be in camera projection space...
-	//float Depth = texture2D(SceneDepthTexture, uv).x;	//	already 0...1
+	//float Depth = texture(SceneDepthTexture, uv).x;	//	already 0...1
 	float Depth = 1.0;
 
 	vec3 xyz = mix( vec3(-1,-1,-1), vec3(1,1,1), vec3(uv,Depth) );
@@ -317,8 +319,8 @@ vec3 ApplyLighting(vec3 Colour)
 
 void main()
 {
-	gl_FragColor = FragColour;
-	gl_FragColor.xyz = ApplyLighting( gl_FragColor.xyz );
+	OutFragColor = FragColour;
+	OutFragColor.xyz = ApplyLighting( OutFragColor.xyz );
 }
 
 

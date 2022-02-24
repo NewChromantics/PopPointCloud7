@@ -6,6 +6,7 @@
 layout(num_views=2) in;
 #endif
 
+
 in vec3 LocalPosition;
 in vec3 LocalUv;
 in vec3 LocalNormal;
@@ -19,23 +20,54 @@ out vec4 FragColour;
 out vec3 FragLocalNormal;
 out vec3 FragWorldNormal;
 
-in mat4 LocalToWorldTransform;
-in vec3 WorldVelocity;
+//#define LocalToWorldTransform GetLocalToWorldTransform()
+//in mat4 LocalToWorldTransform;
+in vec2 PhysicsPositionUv;
+//const vec2 PhysicsPositionUv = vec2(0,0);
+
+//	gr: we have a problem here... the previous position is often very close
+//		and if not moving at all they disapear
+const bool UsePreviousPositionsTexture = true;
+uniform sampler2D PhysicsPreviousPositionsTexture;
+uniform sampler2D PhysicsPositionsTexture;
+uniform vec2 PhysicsPositionsTextureSize;
+uniform sampler2D PhysicsVelocitysTexture;
+
 uniform mat4 WorldToCameraTransform;
 uniform mat4 CameraProjectionTransform;
 in vec4 Colour;
+//const float3 Colour = vec3(0,0,1);
 
 uniform float VelocityStretch;
 
+mat4 GetLocalToWorldTransform()
+{
+	vec4 Position4 = texture( PhysicsPositionsTexture, PhysicsPositionUv.xy );
+	vec3 WorldPosition = Position4.xyz;
+	//vec3 WorldPosition = vec3(PhysicsPositionUv,0);
+	
+	mat4 Transform = mat4( 1,0,0,0,	
+							0,1,0,0,	
+							0,0,1,0,	
+							WorldPosition,1 );
+	return Transform;
+}
 
-vec3 GetWorldPos()
+#define WorldVelocity	GetWorldVelocity()
+vec3 GetWorldVelocity()
+{
+	vec4 Velocity4 = texture( PhysicsVelocitysTexture, PhysicsPositionUv );
+	return Velocity4.xyz;
+}
+
+vec3 GetWorldPos(mat4 LocalToWorldTransform)
 {
 	vec4 WorldPos = LocalToWorldTransform * vec4(LocalPosition,1.0);
-	WorldPos.xyz *= WorldPos.www;
+	WorldPos.xyz /= WorldPos.www;
 	WorldPos.w = 1.0;
 
 	vec4 OriginWorldPos = LocalToWorldTransform * vec4(0,0,0,1);
-	OriginWorldPos.xyz *= OriginWorldPos.www;
+	OriginWorldPos.xyz /= OriginWorldPos.www;
 	OriginWorldPos.w = 1.0;	
 	
 	//	stretch world pos along velocity
@@ -49,16 +81,20 @@ vec3 GetWorldPos()
 	
 	//	this is the opposite of what it should be and shows the future
 	//	but better than flashes of past that wasnt there (better if we just stored prev pos)
-	vec3 NextPos = WorldPos.xyz - (TailDelta*0.9);
-	vec3 PrevPos = WorldPos.xyz + (TailDelta*0.1);
+	float ForwardWeight = UsePreviousPositionsTexture ? 0.9 : 0.9;
+	float BackwarddWeight = UsePreviousPositionsTexture ? 0.0 : 0.1;
+	vec3 NextPos = WorldPos.xyz - (TailDelta*ForwardWeight);
+	vec3 PrevPos = WorldPos.xyz + (TailDelta*BackwarddWeight);
+	
+	if ( UsePreviousPositionsTexture )
+	{
+		PrevPos.xyz = texture( PhysicsPreviousPositionsTexture, PhysicsPositionUv ).xyz;
+		PrevPos.xyz += LocalPosition;
+	}
 	
 	//	"lerp" between depending on whether we're at front or back
 	//	^^ this is why we're getting angled shapes, even if we did a cut off we
 	//	could have 1/8 verts in front
-	
-	//	gr; this nvidia object space motion blur stretches if the [current]normal 
-	//		is inline(dot(next-prev,velocity)>0) with the motion vector(velocity)... in EYESPACE
-	//	https://www.nvidia.com/docs/io/8230/gdc2003_openglshadertricks.pdf
 	float Scale = dot( normalize(LocalPosInWorld), normalize(-TailDelta) );
 	float Lerp = Scale > 0.0 ? 1.0 : 0.0;
 	
@@ -66,16 +102,16 @@ vec3 GetWorldPos()
 	return WorldPos.xyz;
 }
 
-
 void main()
 {
-	vec3 WorldPos = GetWorldPos();
+	mat4 LocalToWorldTransform = GetLocalToWorldTransform();
+	
+	vec3 WorldPos = GetWorldPos(LocalToWorldTransform);
 	vec4 CameraPos = WorldToCameraTransform * vec4(WorldPos,1.0);	//	world to camera space
 	vec4 ProjectionPos = CameraProjectionTransform * CameraPos;
 
 	vec4 WorldNormal = LocalToWorldTransform * vec4(LocalNormal,0.0);
 	WorldNormal.xyz = normalize(WorldNormal.xyz);
-
 
 	gl_Position = ProjectionPos;
 	

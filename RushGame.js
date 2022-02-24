@@ -142,7 +142,7 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projec
 		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
 	}
 	
-	
+	//	quest doesn't support MRT
 	const UseMrt = false;
 	
 	
@@ -1338,7 +1338,8 @@ export default class App_t
 			const VertFilename = 'Geo.vert.glsl';
 			const FragFilename = 'Colour.frag.glsl';
 			CubeShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename);
-			const VertPhysicsFilename = 'PhysicsGeo.vert.glsl';
+			//const VertPhysicsFilename = 'PhysicsGeo.vert.glsl';
+			const VertPhysicsFilename = 'PhysicsGeoMultiView.vert.glsl';
 			CubePhysicsShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename);
 		}
 		{
