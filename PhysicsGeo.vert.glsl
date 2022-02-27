@@ -51,7 +51,9 @@ uniform float VelocityStretch;
 
 mat4 GetLocalToWorldTransform()
 {
-	vec4 Position4 = texture( PhysicsPositionsTexture, PhysicsPositionUv.xy );
+	//	texelfetch seems a tiny bit faster
+	//vec4 Position4 = texture( PhysicsPositionsTexture, PhysicsPositionUv.xy );
+	vec4 Position4 = texelFetch( PhysicsPositionsTexture, ivec2(PhysicsPositionUv.xy*PhysicsPositionsTextureSize), 0 );
 	vec3 WorldPosition = Position4.xyz;
 	//vec3 WorldPosition = vec3(PhysicsPositionUv,0);
 	
@@ -65,7 +67,9 @@ mat4 GetLocalToWorldTransform()
 #define WorldVelocity	GetWorldVelocity()
 vec3 GetWorldVelocity()
 {
-	vec4 Velocity4 = texture( PhysicsVelocitysTexture, PhysicsPositionUv );
+	//	texelfetch seems a tiny bit faster
+	//vec4 Velocity4 = texture( PhysicsVelocitysTexture, PhysicsPositionUv );
+	vec4 Velocity4 = texelFetch( PhysicsVelocitysTexture, ivec2(PhysicsPositionUv*PhysicsPositionsTextureSize), 0 );
 	return Velocity4.xyz;
 }
 
@@ -97,7 +101,8 @@ vec3 GetWorldPos(mat4 LocalToWorldTransform)
 	
 	if ( UsePreviousPositionsTexture )
 	{
-		PrevPos.xyz = texture( PhysicsPreviousPositionsTexture, PhysicsPositionUv ).xyz;
+		//PrevPos.xyz = texture( PhysicsPreviousPositionsTexture, PhysicsPositionUv ).xyz;
+		PrevPos.xyz = texelFetch( PhysicsPreviousPositionsTexture, ivec2(PhysicsPositionUv*PhysicsPositionsTextureSize), 0 ).xyz;
 		PrevPos.xyz += LocalPosition;
 	}
 	
@@ -114,7 +119,7 @@ vec3 GetWorldPos(mat4 LocalToWorldTransform)
 void main()
 {
 	mat4 LocalToWorldTransform = GetLocalToWorldTransform();
-	
+
 	vec3 WorldPos = GetWorldPos(LocalToWorldTransform);
 	vec4 CameraPos = WorldToCameraTransform * vec4(WorldPos,1.0);	//	world to camera space
 	vec4 ProjectionPos = CameraProjectionTransform * CameraPos;

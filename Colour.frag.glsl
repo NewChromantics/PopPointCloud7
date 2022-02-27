@@ -37,17 +37,19 @@ float Range01(float Min,float Max,float Value)
 
 bool Inside01(float f)
 {
+	//	make use of sign here? (like sign(f)*(1.0-sign(f-1.0))
 	return (f>0.0)&&(f<1.0);
 }
 
-vec3 GetMapPosition(vec3 WorldPosition,out bool Inside)
+
+vec3 GetMapPosition(vec3 WorldPosition/*,out float Inside*/)
 {
 	vec3 WorldUv;
 	WorldUv.x = Range01( OccupancyMapWorldMin.x, OccupancyMapWorldMax.x, WorldPosition.x );
 	WorldUv.y = Range01( OccupancyMapWorldMin.y, OccupancyMapWorldMax.y, WorldPosition.y );
 	WorldUv.z = Range01( OccupancyMapWorldMin.z, OccupancyMapWorldMax.z, WorldPosition.z );
 	
-	Inside = Inside01(WorldUv.x) && Inside01(WorldUv.y) && Inside01(WorldUv.z);
+	//Inside = Inside01(WorldUv.x) && Inside01(WorldUv.y) && Inside01(WorldUv.z);
 	return WorldUv;
 }
 
@@ -71,26 +73,30 @@ const vec3 LightWorldPosition = vec3(1,10,0);
 #define GENERATE_ADDITIONAL_SHADOW	false
 
 //	faster version but hard shadow only
-#define SHADOW_ANY_ABOVE		true
+#define SHADOW_ANY_ABOVE		true	//	false=noticably slower
 
 vec4 GetOccupancySample(vec3 WorldPosition,out float MapPositionYNormalised)
 {
-	bool Inside;
-	vec3 MapPosition = GetMapPosition(WorldPosition,Inside);
-	if ( !Inside )	return vec4(0);
+	float Inside;
+	//vec3 MapPosition = GetMapPosition(WorldPosition,Inside);
+	vec3 MapPosition = GetMapPosition(WorldPosition);
+	//if ( !Inside )	return vec4(0);
 	vec2 MapPx = floor( MapPosition.xz * OccupancyMapTextureSize );
 	vec2 TexelSize = vec2(1) / OccupancyMapTextureSize;
 	vec2 MapUv = MapPx * TexelSize;
 	
 	MapPositionYNormalised = MapPosition.y;
 	
-	vec4 OccupancyData = texture( OccupancyMapTexture, MapUv );
+	//	texelfetch is a tiny bit faster
+	//vec4 OccupancyData = texture( OccupancyMapTexture, MapUv );
+	vec4 OccupancyData = texelFetch( OccupancyMapTexture, ivec2(MapPx), 0 );
 	return OccupancyData;
 }
 
 float GetSectionValue(float Section)
 {
 	//	pow(10,0)==1 ??
+	//	pow is more expensive, but maybe we can avoid the if's
 	//return pow( 10.0, Section );
 	if ( Section == 0.0 )		return 1.0;
 	if ( Section == 1.0 )		return 10.0;
@@ -137,6 +143,9 @@ float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 	//	get our position in the occupancy map
 	float MapYNormalised;
 	vec4 OccupancyData = GetOccupancySample(WorldPosition,MapYNormalised);
+	
+	//	just return anything so we can test minimal texture sample
+	//return (OccupancyData.x+OccupancyData.y+OccupancyData.z+OccupancyData.w)/10000.0;
 
 	//	from blit occupancy frag
 	float ThisSection = floor(MapYNormalised * YSectionCountf );
@@ -159,10 +168,7 @@ float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 		OccupancyData = floor(OccupancyData);
 	
 		float AnyShadow = OccupancyData.x + OccupancyData.y + OccupancyData.z + OccupancyData.w;
-		if ( AnyShadow >= 1.0 )
-			return 1.0;
-		else
-			return 0.0;
+		return sign( AnyShadow );
 	}
 	else
 	{
