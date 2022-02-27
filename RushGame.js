@@ -1280,7 +1280,8 @@ class Game_t
 			{
 				if ( SkipEveryX!=0 && Index % SkipEveryX == 0 )
 					return null;
-				let Scale = [CubeSize*2,CubeSize*2,CubeSize*2];
+				let Scale = 2;
+				Scale = [CubeSize*Scale,CubeSize*Scale,CubeSize*Scale];
 				
 				xyz = Multiply3( xyz, Scale );
 				xyz = Add3( xyz, VoxelCenterPosition );
