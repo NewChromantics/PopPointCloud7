@@ -23,9 +23,9 @@ const BEHAVIOUR_SHAPE = 2;
 const CubeVelocityStretch = 2.0;
 const FloorColour = [24, 64, 196,255].map(x=>(x/255));
 //const FloorColour = [0.1,0.3,0.4,1.0];
-const RenderFloor = false;
-const RenderWeapons = false;
-const RenderProjectiles = false;
+const RenderFloor = true;
+const RenderWeapons = true;
+const RenderProjectiles = true;
 const FloorSize = 300;//800
 
 const RenderDebugQuads = false;	//	need to avoid in xr
