@@ -4,6 +4,13 @@
 #if defined(MULTI_VIEW)
 #extension GL_OVR_multiview : require
 layout(num_views=2) in;
+//	gr: popengine writes these automatically (these could be up to 15 for... caves?)
+uniform mat4 Pop_CameraWorldToCameraTransforms[2];
+uniform mat4 Pop_CameraProjectionTransforms[2];
+
+//	gl_ViewID_OVR is keyword which dictates which eye is being rendered (0,1,etc)
+#define WorldToCameraTransform		( Pop_CameraWorldToCameraTransforms[gl_ViewID_OVR] )
+#define CameraProjectionTransform	( Pop_CameraProjectionTransforms[gl_ViewID_OVR] )
 #endif
 
 in vec3 LocalPosition;
@@ -21,8 +28,10 @@ out vec3 FragWorldNormal;
 
 in mat4 LocalToWorldTransform;
 in vec3 WorldVelocity;
+#if !defined(WorldToCameraTransform)
 uniform mat4 WorldToCameraTransform;
 uniform mat4 CameraProjectionTransform;
+#endif
 in vec4 Colour;
 
 uniform float VelocityStretch;
