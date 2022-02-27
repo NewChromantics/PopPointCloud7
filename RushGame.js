@@ -488,7 +488,9 @@ function GetColourN(xyz,Index)
 
 let BoundingBoxShader = null;
 let CubeShader = null;
+let CubeMultiViewShader = null;
 let CubePhysicsShader = null;
+let CubePhysicsMultiViewShader = null;
 let AppCamera = new Camera_t();
 //	try and emulate default XR pose a bit
 AppCamera.Position = [0,1.5,0];
@@ -935,7 +937,7 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,Cub
 		return;
 		
 	const Geo = AssetManager.GetAsset('Cube',RenderContext);
-	const Shader = AssetManager.GetAsset(CubeShader,RenderContext);
+	const Shader = AssetManager.GetAsset( CameraUniforms.MultiView ? CubeMultiViewShader : CubeShader,RenderContext);
 
 	const Uniforms = Object.assign({},CameraUniforms);
 	Uniforms.LocalToWorldTransform = CubeTransforms;
@@ -963,7 +965,7 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 		return;
 		
 	const Geo = AssetManager.GetAsset('Cube',RenderContext);
-	const Shader = AssetManager.GetAsset(CubePhysicsShader,RenderContext);
+	const Shader = AssetManager.GetAsset(CameraUniforms.MultiView ? CubePhysicsMultiViewShader : CubePhysicsShader,RenderContext);
 
 	const Uniforms = Object.assign({},CameraUniforms);
 	//Uniforms.LocalToWorldTransform = CubeTransforms;
@@ -1343,13 +1345,17 @@ export default class App_t
 		AssetManager.RegisterAssetAsyncFetchFunction('BlitQuad', CreateBlitTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('DebugQuad', CreateDebugQuadTriangleBuffer );
 
+		const MultiViewDefines = {};
+		MultiViewDefines.MULTI_VIEW = true;
+
 		{
 			const VertFilename = 'Geo.vert.glsl';
 			const FragFilename = 'Colour.frag.glsl';
 			CubeShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename);
-			//const VertPhysicsFilename = 'PhysicsGeo.vert.glsl';
-			const VertPhysicsFilename = 'PhysicsGeoMultiView.vert.glsl';
+			CubeMultiViewShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename,MultiViewDefines);
+			const VertPhysicsFilename = 'PhysicsGeo.vert.glsl';
 			CubePhysicsShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename);
+			CubePhysicsMultiViewShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename,MultiViewDefines);
 		}
 		{
 			const VertFilename = 'Geo.vert.glsl';
@@ -1501,6 +1507,11 @@ export default class App_t
 		CameraUniforms.CameraProjectionTransform = Camera.GetProjectionMatrix(Viewport);
 		CameraUniforms.DepthTexture = Camera.DepthImage || DefaultDepthTexture;
 		CameraUniforms.NormalDepthToViewDepthTransform = CameraUniforms.DepthTexture.NormalDepthToViewDepthTransform || [];
+		
+		//	pass this data down to the GetDrawCommands() stuff
+		if ( Camera.MultiView )
+			CameraUniforms.MultiView = true;
+		
 		return CameraUniforms;
 	}
 	
