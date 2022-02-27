@@ -13,6 +13,9 @@ import ParseMagicaVox from './PopEngine/MagicaVox.js'
 //	somehow this should be passed from XR api/camera (default clear?)
 const ClearColour = [0,0,0,1];
 
+const EmptyScene = false;
+const EnableGpuPhysics = true;
+
 const BEHAVIOUR_STATIC = 0;
 const BEHAVIOUR_DEBRIS = 1;
 const BEHAVIOUR_SHAPE = 2;
@@ -20,7 +23,9 @@ const BEHAVIOUR_SHAPE = 2;
 const CubeVelocityStretch = 2.0;
 const FloorColour = [24, 64, 196,255].map(x=>(x/255));
 //const FloorColour = [0.1,0.3,0.4,1.0];
-const RenderFloor = true;
+const RenderFloor = false;
+const RenderWeapons = false;
+const RenderProjectiles = false;
 const FloorSize = 300;//800
 
 const RenderDebugQuads = false;	//	need to avoid in xr
@@ -1217,7 +1222,11 @@ class Game_t
 		//	also... dont need to wait if we're not reading stuff back
 		//	this causes 2 waits for animations
 		//await RenderContext.Render(Commands);
-		RenderContext.Render(Commands);
+		//	gr: for now, let it create commands, textures etc, just dont run them
+		if ( EnableGpuPhysics )
+		{
+			RenderContext.Render(Commands);
+		}
 	}
 	
 	async WaitForEnemniesDestroyed()
@@ -1478,6 +1487,23 @@ export default class App_t
 		return this.GetSceneRenderCommands(...arguments);
 	}
 	
+	GetSceneCameraUniforms(Camera,Viewport)
+	{
+		//	normalise viewport
+		Viewport[0] = 0;
+		Viewport[1] = 0;
+		Viewport[3] /= Viewport[2];
+		Viewport[2] /= Viewport[2];
+
+		const CameraUniforms = {};
+		CameraUniforms.WorldToCameraTransform = Camera.GetWorldToCameraMatrix();
+		CameraUniforms.CameraToWorldTransform = Camera.GetLocalToWorldMatrix();
+		CameraUniforms.CameraProjectionTransform = Camera.GetProjectionMatrix(Viewport);
+		CameraUniforms.DepthTexture = Camera.DepthImage || DefaultDepthTexture;
+		CameraUniforms.NormalDepthToViewDepthTransform = CameraUniforms.DepthTexture.NormalDepthToViewDepthTransform || [];
+		return CameraUniforms;
+	}
+	
 	GetSceneRenderCommands(RenderContext,Camera,Viewport=[0,0,1,1])
 	{
 		//	make screen camera track xr camera
@@ -1489,17 +1515,12 @@ export default class App_t
 		
 		const ClearCommand = ['SetRenderTarget',null,ClearColour];
 
-		const CameraUniforms = {};
-		//	normalise viewport
-		Viewport[0] = 0;
-		Viewport[1] = 0;
-		Viewport[3] /= Viewport[2];
-		Viewport[2] /= Viewport[2];
-		CameraUniforms.WorldToCameraTransform = Camera.GetWorldToCameraMatrix();
-		CameraUniforms.CameraToWorldTransform = Camera.GetLocalToWorldMatrix();
-		CameraUniforms.CameraProjectionTransform = Camera.GetProjectionMatrix(Viewport);
-		CameraUniforms.DepthTexture = Camera.DepthImage || DefaultDepthTexture;
-		CameraUniforms.NormalDepthToViewDepthTransform = CameraUniforms.DepthTexture.NormalDepthToViewDepthTransform || [];
+		if ( EmptyScene )
+		{
+			return [ClearCommand];
+		}
+
+		const CameraUniforms = this.GetSceneCameraUniforms(Camera,Viewport);
 
 
 		const CubeCommands = [];
@@ -1516,14 +1537,18 @@ export default class App_t
 		this.Game.UpdateWeaponDesktop(Camera);
 		
 		//	weapon cube(shapes)
-		for ( let Weapon of this.Game.GetWeapons() )
+		if ( RenderWeapons )
 		{
-			const Positions = Weapon.GetRenderLocalToWorldTransforms();
-			const Velocitys = new Array(Positions.length).fill([0,0,0]);
-			RenderCubes( PushCommand, RenderContext, CameraUniforms, Positions, Velocitys, this.Game.OccupancyTexture );
+			for ( let Weapon of this.Game.GetWeapons() )
+			{
+				const Positions = Weapon.GetRenderLocalToWorldTransforms();
+				const Velocitys = new Array(Positions.length).fill([0,0,0]);
+				RenderCubes( PushCommand, RenderContext, CameraUniforms, Positions, Velocitys, this.Game.OccupancyTexture );
+			}
 		}
 		
 		//	projectile cubes
+		if ( RenderProjectiles )
 		{
 			let Transforms = [];
 			let Velocitys = [];

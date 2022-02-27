@@ -1,9 +1,22 @@
 #version 300 es
-//#define MULTI_VIEW
+#define MULTI_VIEW
 
 #if defined(MULTI_VIEW)
 #extension GL_OVR_multiview : require
 layout(num_views=2) in;
+//	gr: these are NOT provided, but gl_ViewID_OVR is
+//uniform mat4 leftProjectionMat;
+//uniform mat4 leftModelViewMat;
+//uniform mat4 rightProjectionMat;
+//uniform mat4 rightModelViewMat;
+//	gr: popengine writes these automatically (these could be up to 15 for... caves?)
+uniform mat4 Pop_CameraWorldToCameraTransforms[2];
+uniform mat4 Pop_CameraProjectionTransforms[2];
+
+//	gl_ViewID_OVR is keyword which dictates which eye is being rendered
+#define IS_LEFT_EYE	(gl_ViewID_OVR==0u)
+#define WorldToCameraTransform		( Pop_CameraWorldToCameraTransforms[gl_ViewID_OVR] )
+#define CameraProjectionTransform	( Pop_CameraProjectionTransforms[gl_ViewID_OVR] )
 #endif
 
 
@@ -33,8 +46,11 @@ uniform sampler2D PhysicsPositionsTexture;
 uniform vec2 PhysicsPositionsTextureSize;
 uniform sampler2D PhysicsVelocitysTexture;
 
+//	defined by macro in multiview
+#if !defined(WorldToCameraTransform)
 uniform mat4 WorldToCameraTransform;
 uniform mat4 CameraProjectionTransform;
+#endif
 in vec4 Colour;
 //const float3 Colour = vec3(0,0,1);
 
