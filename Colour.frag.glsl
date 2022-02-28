@@ -42,14 +42,14 @@ bool Inside01(float f)
 }
 
 
-vec3 GetMapPosition(vec3 WorldPosition/*,out float Inside*/)
+vec3 GetMapPosition(vec3 WorldPosition,out bool Inside)
 {
 	vec3 WorldUv;
 	WorldUv.x = Range01( OccupancyMapWorldMin.x, OccupancyMapWorldMax.x, WorldPosition.x );
 	WorldUv.y = Range01( OccupancyMapWorldMin.y, OccupancyMapWorldMax.y, WorldPosition.y );
 	WorldUv.z = Range01( OccupancyMapWorldMin.z, OccupancyMapWorldMax.z, WorldPosition.z );
 	
-	//Inside = Inside01(WorldUv.x) && Inside01(WorldUv.y) && Inside01(WorldUv.z);
+	Inside = Inside01(WorldUv.x) && Inside01(WorldUv.y) && Inside01(WorldUv.z);
 	return WorldUv;
 }
 
@@ -81,17 +81,15 @@ in vec4 FragOccupancySample;
 in float FragOccupancyShadow;
 #endif
 
-vec4 GetOccupancySample(vec3 WorldPosition,out float MapPositionYNormalised)
+vec4 GetOccupancySample(vec3 WorldPosition,out float MapPositionYNormalised,out bool InsideMap)
 {
 #if defined(OCCUPANCY_IN_VERTEX)
 	vec3 MapPosition = GetMapPosition(WorldPosition);
 	MapPositionYNormalised = MapPosition.y;
 	return FragOccupancySample;
 #else
-	float Inside;
-	//vec3 MapPosition = GetMapPosition(WorldPosition,Inside);
-	vec3 MapPosition = GetMapPosition(WorldPosition);
-	//if ( !Inside )	return vec4(0);
+	vec3 MapPosition = GetMapPosition(WorldPosition,InsideMap);
+	if ( !InsideMap )	return vec4(0);
 	vec2 MapPx = floor( MapPosition.xz * OccupancyMapTextureSize );
 	vec2 TexelSize = vec2(1) / OccupancyMapTextureSize;
 	vec2 MapUv = MapPx * TexelSize;
@@ -152,12 +150,23 @@ bool HasHitInOccupancyData(vec4 OccupancyData,float Section)
 
 float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 {
+	const float BoundsShadow = 0.7;
+	const float BoundsShadowRadius = 3.0;
+	//vec3 LightCenter = vec3(-2,0,-4);
+	vec3 LightCenter = mix( OccupancyMapWorldMin, OccupancyMapWorldMax, 0.5 );
+	if ( distance(LightCenter.xz,WorldPosition.xz) > BoundsShadowRadius )
+	//if ( length(WorldPosition.z < -7.0 )
+		return BoundsShadow;
+		
 #if defined(OCCUPANCY_IN_VERTEX)
 	//return FragOccupancyShadow;
 #endif
 	//	get our position in the occupancy map
 	float MapYNormalised;
-	vec4 OccupancyData = GetOccupancySample(WorldPosition,MapYNormalised);
+	bool InsideMap;
+	vec4 OccupancyData = GetOccupancySample(WorldPosition,MapYNormalised,InsideMap);
+	if ( !InsideMap )
+		return BoundsShadow;
 	
 	//	just return anything so we can test minimal texture sample
 	//return (OccupancyData.x+OccupancyData.y+OccupancyData.z+OccupancyData.w)/10000.0;
