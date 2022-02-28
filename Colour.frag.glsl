@@ -75,8 +75,19 @@ const vec3 LightWorldPosition = vec3(1,10,0);
 //	faster version but hard shadow only
 #define SHADOW_ANY_ABOVE		true	//	false=noticably slower
 
+//#define OCCUPANCY_IN_VERTEX
+#if defined(OCCUPANCY_IN_VERTEX)
+in vec4 FragOccupancySample;
+in float FragOccupancyShadow;
+#endif
+
 vec4 GetOccupancySample(vec3 WorldPosition,out float MapPositionYNormalised)
 {
+#if defined(OCCUPANCY_IN_VERTEX)
+	vec3 MapPosition = GetMapPosition(WorldPosition);
+	MapPositionYNormalised = MapPosition.y;
+	return FragOccupancySample;
+#else
 	float Inside;
 	//vec3 MapPosition = GetMapPosition(WorldPosition,Inside);
 	vec3 MapPosition = GetMapPosition(WorldPosition);
@@ -91,6 +102,7 @@ vec4 GetOccupancySample(vec3 WorldPosition,out float MapPositionYNormalised)
 	//vec4 OccupancyData = texture( OccupancyMapTexture, MapUv );
 	vec4 OccupancyData = texelFetch( OccupancyMapTexture, ivec2(MapPx), 0 );
 	return OccupancyData;
+#endif
 }
 
 float GetSectionValue(float Section)
@@ -140,6 +152,9 @@ bool HasHitInOccupancyData(vec4 OccupancyData,float Section)
 
 float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 {
+#if defined(OCCUPANCY_IN_VERTEX)
+	//return FragOccupancyShadow;
+#endif
 	//	get our position in the occupancy map
 	float MapYNormalised;
 	vec4 OccupancyData = GetOccupancySample(WorldPosition,MapYNormalised);
