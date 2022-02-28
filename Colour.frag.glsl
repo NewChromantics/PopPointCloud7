@@ -151,7 +151,7 @@ bool HasHitInOccupancyData(vec4 OccupancyData,float Section)
 float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 {
 	const float BoundsShadow = 0.7;
-	const float BoundsShadowRadius = 3.0;
+	const float BoundsShadowRadius = 3.2;	//	gr: tiny bit bigger to get user's hand
 	//vec3 LightCenter = vec3(-2,0,-4);
 	vec3 LightCenter = mix( OccupancyMapWorldMin, OccupancyMapWorldMax, 0.5 );
 	if ( distance(LightCenter.xz,WorldPosition.xz) > BoundsShadowRadius )
