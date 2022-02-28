@@ -1346,17 +1346,22 @@ export default class App_t
 		AssetManager.RegisterAssetAsyncFetchFunction('BlitQuad', CreateBlitTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('DebugQuad', CreateDebugQuadTriangleBuffer );
 
-		const MultiViewDefines = {};
-		MultiViewDefines.MULTI_VIEW = true;
+		const MultiViewMacros = {};
+		MultiViewMacros.MULTI_VIEW = true;
+
+		const TexturePositionMacros = {};
+		TexturePositionMacros.POSITION_FROM_TEXTURE = 1;
+
+		const TexturePositionAndMultiView = Object.assign( {}, MultiViewMacros, TexturePositionMacros );
 
 		{
 			const VertFilename = 'Geo.vert.glsl';
 			const FragFilename = 'Colour.frag.glsl';
 			CubeShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename);
-			CubeMultiViewShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename,MultiViewDefines);
-			const VertPhysicsFilename = 'PhysicsGeo.vert.glsl';
-			CubePhysicsShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename);
-			CubePhysicsMultiViewShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename,MultiViewDefines);
+			CubeMultiViewShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename,MultiViewMacros);
+			const VertPhysicsFilename = VertFilename;
+			CubePhysicsShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename,TexturePositionMacros);
+			CubePhysicsMultiViewShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename,TexturePositionAndMultiView);
 		}
 		{
 			const VertFilename = 'Geo.vert.glsl';

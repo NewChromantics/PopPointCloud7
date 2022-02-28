@@ -27,7 +27,6 @@ out vec3 FragLocalNormal;
 out vec3 FragWorldNormal;
 
 in mat4 LocalToWorldTransform;
-in vec3 WorldVelocity;
 #if !defined(WorldToCameraTransform)
 uniform mat4 WorldToCameraTransform;
 uniform mat4 CameraProjectionTransform;
@@ -37,7 +36,56 @@ in vec4 Colour;
 uniform float VelocityStretch;
 
 
-vec3 GetWorldPos()
+#if defined(POSITION_FROM_TEXTURE)
+//	gr: we have a problem here... the previous position is often very close
+//		and if not moving at all they disapear
+#define USE_PREVIOUS_POSITIONS_TEXTURE 1
+//const bool UsePreviousPositionsTexture = true;
+in vec2 PhysicsPositionUv;
+uniform sampler2D PhysicsPreviousPositionsTexture;
+uniform sampler2D PhysicsPositionsTexture;
+uniform vec2 PhysicsPositionsTextureSize;
+uniform sampler2D PhysicsVelocitysTexture;
+
+mat4 GetLocalToWorldTransform()
+{
+	//	texelfetch seems a tiny bit faster
+	//vec4 Position4 = texture( PhysicsPositionsTexture, PhysicsPositionUv.xy );
+	vec4 Position4 = texelFetch( PhysicsPositionsTexture, ivec2(PhysicsPositionUv.xy*PhysicsPositionsTextureSize), 0 );
+	vec3 WorldPosition = Position4.xyz;
+	//vec3 WorldPosition = vec3(PhysicsPositionUv,0);
+	
+	mat4 Transform = mat4( 1,0,0,0,	
+							0,1,0,0,	
+							0,0,1,0,	
+							WorldPosition,1 );
+	return Transform;
+}
+
+#define WorldVelocity	GetWorldVelocity()
+vec3 GetWorldVelocity()
+{
+	//	texelfetch seems a tiny bit faster
+	//vec4 Velocity4 = texture( PhysicsVelocitysTexture, PhysicsPositionUv );
+	vec4 Velocity4 = texelFetch( PhysicsVelocitysTexture, ivec2(PhysicsPositionUv*PhysicsPositionsTextureSize), 0 );
+	return Velocity4.xyz;
+}
+
+#else // ! POSITION_FROM_TEXTURE
+#define USE_PREVIOUS_POSITIONS_TEXTURE 0
+
+in vec3 WorldVelocity;
+
+mat4 GetLocalToWorldTransform()
+{
+	return LocalToWorldTransform;
+}
+#endif
+
+#define UsePreviousPositionsTexture	(USE_PREVIOUS_POSITIONS_TEXTURE==1)
+
+
+vec3 GetWorldPos(mat4 LocalToWorldTransform)
 {
 	vec4 WorldPos = LocalToWorldTransform * vec4(LocalPosition,1.0);
 	WorldPos.xyz *= WorldPos.www;
@@ -58,9 +106,19 @@ vec3 GetWorldPos()
 	
 	//	this is the opposite of what it should be and shows the future
 	//	but better than flashes of past that wasnt there (better if we just stored prev pos)
-	vec3 NextPos = WorldPos.xyz - (TailDelta*0.9);
-	vec3 PrevPos = WorldPos.xyz + (TailDelta*0.1);
+	float ForwardWeight = UsePreviousPositionsTexture ? 0.9 : 0.9;
+	float BackwarddWeight = UsePreviousPositionsTexture ? 0.0 : 0.1;
+	vec3 NextPos = WorldPos.xyz - (TailDelta*ForwardWeight);
+	vec3 PrevPos = WorldPos.xyz + (TailDelta*BackwarddWeight);
 	
+#if USE_PREVIOUS_POSITIONS_TEXTURE==1
+	if ( UsePreviousPositionsTexture )
+	{
+		//PrevPos.xyz = texture( PhysicsPreviousPositionsTexture, PhysicsPositionUv ).xyz;
+		PrevPos.xyz = texelFetch( PhysicsPreviousPositionsTexture, ivec2(PhysicsPositionUv*PhysicsPositionsTextureSize), 0 ).xyz;
+		PrevPos.xyz += LocalPosition;
+	}
+#endif
 	//	"lerp" between depending on whether we're at front or back
 	//	^^ this is why we're getting angled shapes, even if we did a cut off we
 	//	could have 1/8 verts in front
@@ -78,7 +136,9 @@ vec3 GetWorldPos()
 
 void main()
 {
-	vec3 WorldPos = GetWorldPos();
+	mat4 LocalToWorldTransform = GetLocalToWorldTransform();
+
+	vec3 WorldPos = GetWorldPos(LocalToWorldTransform);
 	vec4 CameraPos = WorldToCameraTransform * vec4(WorldPos,1.0);	//	world to camera space
 	vec4 ProjectionPos = CameraProjectionTransform * CameraPos;
 
