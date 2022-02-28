@@ -331,11 +331,18 @@ void main()
 	//	a non varying world pos
 	//	change this to be 3 (non varying) samples for the triangle
 	//	and then lerp/smoothstep in the shader
-	//vec4 LightWorldPos = LocalToWorldTransform * vec4(0,0,0,1);
-	//FragOccupancySample = GetOccupancySample( LightWorldPos.xyz, YNorm );
-	vec3 LightWorldPos = WorldPos.xyz;
+	//vec3 LightWorldPos = WorldPos.xyz;
+	vec3 LightWorldPos = (LocalToWorldTransform * vec4(0,0,0,1)).xyz;
 	vec3 ShadowSamplePosition = LightWorldPos + (FragWorldNormal*ShadowSamplePositionOffset);
-	FragOccupancyShadow = GetOccupancyMapShadowFactor( LightWorldPos.xyz );
+	/* makes no difference on fps
+	if ( WorldPos.z < -2.1 )
+	{
+		FragOccupancySample = vec4(0);
+		FragColour = vec4(1,0,0,1);	
+	}
+	else*/
+		FragOccupancySample = GetOccupancySample( LightWorldPos.xyz, YNorm );
+	//FragOccupancyShadow = GetOccupancyMapShadowFactor( LightWorldPos.xyz );
 #endif
 }
 
