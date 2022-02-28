@@ -73,7 +73,7 @@ const vec3 LightWorldPosition = vec3(1,10,0);
 #define GENERATE_ADDITIONAL_SHADOW	false
 
 //	faster version but hard shadow only
-#define SHADOW_ANY_ABOVE		true	//	false=noticably slower
+#define SHADOW_ANY_ABOVE		false	//	false=noticably slower
 
 //#define OCCUPANCY_IN_VERTEX
 #if defined(OCCUPANCY_IN_VERTEX)
