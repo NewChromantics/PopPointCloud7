@@ -8,6 +8,10 @@ import * as PopMath from './PopEngine/Math.js'
 import Pop from './PopEngine/PopEngine.js'
 import GetBlitPixelTestRenderCommands from './BlitPixelsTest.js'
 import ParseMagicaVox from './PopEngine/MagicaVox.js'
+import {JoinTypedArrays} from './PopEngine/PopApi.js'
+import {GetZeroArray} from './PopEngine/PopApi.js'
+
+
 
 //	adreno (quest2) has a hardware optimised clear for 0,0,0 and 1,1,1
 //	somehow this should be passed from XR api/camera (default clear?)
@@ -93,17 +97,6 @@ async function CreateDebugQuadTriangleBuffer(RenderContext)
 	const TriangleIndexes = undefined;
 	const TriangleBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
 	return TriangleBuffer;
-}
-
-const ZeroArrayCache = {};	//	[Length] = Float32Array(0's)
-function GetZeroArray(Length)
-{
-	if ( !ZeroArrayCache[Length] )
-	{
-		ZeroArrayCache[Length] = new Float32Array(Length);
-		ZeroArrayCache[Length].fill(0);
-	}
-	return ZeroArrayCache[Length];
 }
 
 
@@ -338,25 +331,90 @@ class VoxelBuffer_t
 		this.PreviousPositionsTexture = null;
 		this.VelocitysTexture = null;
 		this.PreviousVelocitysTexture = null;
+		
+		this.VoxelsUsed = 0;
+	}
+	
+	AddVoxel(Position,Velocity,Colour,ModelPosition)
+	{
+		ModelPosition = ModelPosition || Position;
+		this.AddVoxels( [Position], [Velocity], [Colour], [ModelPosition] );
+	}
+	
+	AddVoxels(Positions,Velocitys,Colours,ModelPositions)
+	{
+		if ( !ModelPositions )
+			ModelPositions = Positions;
+		
+		const VoxelCount = Positions.length/4;
+		
+		if ( !this.PositionsTexture )
+			this.AllocVoxels( VoxelCount );
+			
+		const w = this.PositionsTexture.GetWidth();
+		const h = this.PositionsTexture.GetHeight();
+			
+		//	write into each buffer/texture
+		//	todo; part update textures
+		const PositionsBuffer = new Float32Array(w*h*4);
+		const VelocitysBuffer = new Float32Array(w*h*4);
+		PositionsBuffer.set( Positions, this.VoxelsUsed*4 );
+		VelocitysBuffer.set( Velocitys, this.VoxelsUsed*4 );
+		this.ShapePositionsTexture.WritePixels( w, h, PositionsBuffer, 'Float4' );
+		this.PositionsTexture.WritePixels( w, h, PositionsBuffer, 'Float4' );
+		this.PreviousPositionsTexture.WritePixels( w, h, PositionsBuffer, 'Float4' );
+		this.VelocitysTexture.WritePixels( w, h, VelocitysBuffer, 'Float4' );
+		this.PreviousVelocitysTexture.WritePixels( w, h, VelocitysBuffer, 'Float4' );
+		
+		if ( Array.isArray(Colours) )
+			Colours = new Float32Array(Colours.flat(2));
+		
+		this.Colours = JoinTypedArrays([this.Colours,Colours]);
+		this.VoxelsUsed += VoxelCount;
+	}
+	
+	AllocVoxels(PositionCount)
+	{
+		let w = PopMath.GetNextPowerOf2(Math.floor( Math.sqrt(PositionCount) ));
+		let h = w;//	this could reduce until w*h < cubecount
+		let BufferCount = w*h;
+
+		const Zero4s = new Float32Array(4*BufferCount).fill(0);
+
+		//	this buffer dicates instance count
+		this.Colours = new Float32Array(0);
+		
+		//	todo: remove the need for these and add something to only partially update texture
+		//		will need it anyway when we can't read back the last pos/velocity bytes
+		this.PositionsBuffer = new Float32Array(w*h*4);
+		this.VelocitysBuffer = new Float32Array(w*h*4);
+		
+		
+		this.PreviousPositionsTexture = new Pop.Image();
+		this.PreviousPositionsTexture.WritePixels( w, h, Zero4s, 'Float4' );
+		this.PositionsTexture = new Pop.Image();
+		this.PositionsTexture.WritePixels( w, h, Zero4s, 'Float4' );
+		this.ShapePositionsTexture = new Pop.Image();
+		this.ShapePositionsTexture.WritePixels( w, h, Zero4s, 'Float4' );
+		this.VelocitysTexture = new Pop.Image();
+		this.VelocitysTexture.WritePixels( w, h, Zero4s, 'Float4' );
+		this.PreviousVelocitysTexture = new Pop.Image();
+		this.PreviousVelocitysTexture.WritePixels( w, h, Zero4s, 'Float4' );
+		
 	}
 	
 	LoadPositions(Positions,Colours=null,CenterPosition=[0,0,0],InitialVelocityScale=0)
 	{
-		//	todo: append to existing positions,
-		//		need to read latest texture (async op)
-		
-		function GetShapePositon4(xxx,Index)
+		function GetShapePositon4(Position,Index)
 		{
-			if ( Index >= Positions.length )
-				return [0,0,0,0];
-			let xyz = Positions[Index].slice(0,3);
+			let xyz = Position.slice(0,3);
 			xyz = Add3( xyz, CenterPosition );
 			//	we'll use w as a random value per voxel
 			let Random = Math.random();
 			return [...xyz,Random];
 		}
 
-		function GetInitialVelocity4(xxx,Index)
+		function GetInitialVelocity4(Position,Index)
 		{
 			let Scale = Math.random();
 			//	make it less frequent for a high-speed fling
@@ -370,67 +428,16 @@ class VoxelBuffer_t
 			return [x*Scale,y*Scale,z*Scale,BehaviourType];
 		}
 			
-		let w = PopMath.GetNextPowerOf2(Math.floor( Math.sqrt(Positions.length) ));
-		let h = w;//	this could reduce until w*h < cubecount
-		let ShapePosition4s = new Array(w*h).fill(0).map(GetShapePositon4);
-		ShapePosition4s = new Float32Array(ShapePosition4s.flat(2));
-		this.ShapePositionsTexture = new Pop.Image();
-		this.ShapePositionsTexture.WritePixels( w, h, ShapePosition4s, 'Float4' );
+		let Position4s = Positions.map( GetShapePositon4 );
+		Position4s = Position4s.flat(2);
+
+		let Velocity4s = Positions.map( GetInitialVelocity4 );
+		Velocity4s = Velocity4s.flat(2);
 		
-		//	make this auto generative
-		this.PositionsTextureUvs = [];
-		for ( let y=0;	y<h;	y++ )
-		{
-			for ( let x=0;	x<w;	x++ )
-			{
-				let uv = [x/w,y/h];
-				this.PositionsTextureUvs.push(uv);
-			}
-		}
-		this.PositionsTextureUvs = this.PositionsTextureUvs.slice(0,Positions.length);
-		this.PositionsTextureUvs = this.PositionsTextureUvs.flat(2);
-		this.PositionsTextureUvs = new Float32Array(this.PositionsTextureUvs);
+		if ( !Colours )
+			Colours = Positions.map( GetRandomColour );
 		
-		let InitialPosition4s = ShapePosition4s.slice();
-		const StartAtZero = false;
-		if ( StartAtZero )
-		{
-			function GetInitialPositon4(xxx,Index)
-			{
-				//	not well distributed, but doesnt matter, just favour away from 0 for radius
-				const Angle = Math.random() * PopMath.DegToRad(360);
-				let Radius = Math.random();
-				Radius = 1.0 - (Radius*Radius);
-				Radius *= 1;
-				const x = Math.cos(Angle) * Radius;
-				const y = 0;
-				const z = Math.sin(Angle) * Radius;
-				//let xyz = [Math.random()+0,0,Math.random()-5];
-				let xyz = [x-0.8,y,z-5];
-				xyz = Add3( xyz, CenterPosition );
-				return [xyz,1];
-			}
-			InitialPosition4s = new Array(w*h).fill(0).map(GetInitialPositon4);
-			InitialPosition4s = new Float32Array(InitialPosition4s.flat(2));
-		}
-		
-		//	instead of a pool, we're setting up for double buffering
-		this.PreviousPositionsTexture = new Pop.Image();
-		this.PreviousPositionsTexture.WritePixels( w, h, InitialPosition4s, 'Float4' );
-		this.PositionsTexture = new Pop.Image();
-		this.PositionsTexture.WritePixels( w, h, InitialPosition4s, 'Float4' );
-			
-		let Velocity4s = new Array(w*h).fill(0).map(GetInitialVelocity4);
-		Velocity4s = new Float32Array(Velocity4s.flat(2));
-		this.VelocitysTexture = new Pop.Image();
-		this.VelocitysTexture.WritePixels( w, h, Velocity4s, 'Float4' );
-		this.PreviousVelocitysTexture = new Pop.Image();
-		this.PreviousVelocitysTexture.WritePixels( w, h, Velocity4s, 'Float4' );
-		
-		//	instancing buffer
-		if ( Colours.flat )
-			Colours = Colours.flat(2);
-		this.Colours = new Float32Array(Colours);
+		this.AddVoxels( Position4s, Velocity4s, Colours );
 	}
 }
 
@@ -935,6 +942,8 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,Cub
 {
 	if ( !CubeTransforms.length )
 		return;
+	if ( !OccupancyTexture )
+		return;
 		
 	const Geo = AssetManager.GetAsset('Cube',RenderContext);
 	const Shader = AssetManager.GetAsset( CameraUniforms.MultiView ? CubeMultiViewShader : CubeShader,RenderContext);
@@ -963,6 +972,8 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 {
 	if ( !VoxelsBuffer )
 		return;
+	if ( !OccupancyTexture )
+		return;
 		
 	const Geo = AssetManager.GetAsset('Cube',RenderContext);
 	const Shader = AssetManager.GetAsset(CameraUniforms.MultiView ? CubePhysicsMultiViewShader : CubePhysicsShader,RenderContext);
@@ -980,7 +991,6 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 	Uniforms.PhysicsPreviousPositionsTexture = PreviousPositionsTexture;
 	Uniforms.PhysicsPositionsTexture = PositionsTexture;
 	Uniforms.PhysicsPositionsTextureSize = [PositionsTexture.GetWidth(),PositionsTexture.GetHeight()];
-	Uniforms.PhysicsPositionUv = VoxelsBuffer.PositionsTextureUvs;
 	Uniforms.PhysicsVelocitysTexture = VelocitysTexture;
 	
 	Uniforms.OccupancyMapWorldMin = OccupancyMapSize.WorldMin;
@@ -1113,12 +1123,23 @@ class Game_t
 	OnFireWeapon(Weapon)
 	{
 		Weapon.Fire();
+		/*
+		//	create game projectile as a voxel
+		const ForceMetresPerSec = 20;
+		const Position = Weapon.GetFirePosition();
+		const Forward = Weapon.Forward;
+		
+		const Velocity = Multiply3( Forward, [ForceMetresPerSec,ForceMetresPerSec,ForceMetresPerSec] );
+		const Colour = [0,1,0,1];
+		this.VoxelBuffer.AddVoxel( Position, Velocity, Colour );
+		*/
 	}
 		
 	OnDesktopFireDown()
 	{
 		const Weapon = this.GetWeapon('Desktop');
-		Weapon.Fire();
+		//Weapon.Fire();
+		this.OnFireWeapon(Weapon);
 	}
 	
 	OnDesktopFireUp()
@@ -1183,9 +1204,8 @@ class Game_t
 		this.EnumProjectiles( p => Projectiles.push(p) );
 		
 		const Commands = [];
-		for ( let VoxelBuffer of this.VoxelBuffers )
 		{
-			const SomeCommands = GetRenderCommandsUpdatePhysicsTextures( RenderContext, VoxelBuffer, Projectiles );
+			const SomeCommands = GetRenderCommandsUpdatePhysicsTextures( RenderContext, this.VoxelBuffer, Projectiles );
 			Commands.push(...SomeCommands);
 		}
 		
@@ -1203,7 +1223,7 @@ class Game_t
 		{
 			try
 			{
-				const TestCommands = GetBlitPixelTestRenderCommands(RenderContext,this.OccupancyTexture, this.VoxelBuffers[0], OccupancyMapSize, ReadBackOccupancyTexture );
+				const TestCommands = GetBlitPixelTestRenderCommands(RenderContext,this.OccupancyTexture, this.VoxelBuffer, OccupancyMapSize, ReadBackOccupancyTexture );
 				Commands.push(...TestCommands);
 			}
 			catch(e)
@@ -1240,8 +1260,8 @@ class Game_t
 	
 	async LoadLevel()
 	{
-		//	generate voxel enemies
-		this.VoxelBuffers = [];
+		//	we store all our voxels in one big buffer
+		this.VoxelBuffer = new VoxelBuffer_t();
 		
 		const LoadFile = `Models/Taxi.vox`;
 		//const LoadFile = `Models/Skeleton.vox`;
@@ -1250,9 +1270,7 @@ class Game_t
 		if ( !LoadFile )
 		{
 			let Positions = new Array(CubeCount).fill(0).map(GetCubePositionN);
-			let Voxels = new VoxelBuffer_t();
-			Voxels.LoadPositions( Positions, RandomColours, VoxelCenterPosition, 0.4 );
-			this.VoxelBuffers.push(Voxels);
+			this.VoxelBuffer.LoadPositions( Positions, RandomColours, VoxelCenterPosition, 0.4 );
 		}
 		
 		if ( LoadFile )
@@ -1271,8 +1289,6 @@ class Game_t
 			}
 			await ParseMagicaVox( VoxContents, OnGeometry );
 			const Geometry = MergedGeometry;
-			
-			let Voxels = new VoxelBuffer_t();
 			
 			const SkipEveryX = 0;
 			
@@ -1303,8 +1319,7 @@ class Game_t
 			
 			Geometry.Colours = new Float32Array(Geometry.Colours.flat(2));
 			
-			Voxels.LoadPositions( Geometry.Positions, Geometry.Colours, VoxelCenterPosition, 0.0 );
-			this.VoxelBuffers.push(Voxels);
+			this.VoxelBuffer.LoadPositions( Geometry.Positions, Geometry.Colours, VoxelCenterPosition, 0.0 );
 		}
 			
 	}
@@ -1546,9 +1561,8 @@ export default class App_t
 			CubeCommands.push(Command);
 		}
 		
-		for ( let Voxels of this.Game.VoxelBuffers )
 		{
-			RenderVoxelBufferCubes( PushCommand, RenderContext, CameraUniforms, Voxels, this.Game.OccupancyTexture );
+			RenderVoxelBufferCubes( PushCommand, RenderContext, CameraUniforms, this.Game.VoxelBuffer, this.Game.OccupancyTexture );
 		}
 		
 		this.Game.UpdateWeaponDesktop(Camera);

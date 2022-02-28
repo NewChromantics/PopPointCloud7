@@ -8,6 +8,9 @@ import Pop from './PopEngine/PopEngine.js'
 import AssetManager from './PopEngine/AssetManager.js'
 import {HasFetchFunction} from './PopEngine/AssetManager.js'
 import {CreateBlitQuadGeometry} from './PopEngine/CommonGeometry.js'
+import {GetIndexArray} from './PopEngine/PopApi.js'
+
+
 
 
 
@@ -46,20 +49,7 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	const w = OutputTexture.GetWidth();
 	const h = OutputTexture.GetHeight();
 	
-	let PixelPositions = [];
-	if ( Test )
-	{
-		//	instancing quads at each pixel 
-		for ( let x=0;	x<w;	x++ )
-			for ( let y=0;	y<h;	y++ )
-				PixelPositions.push(x,y);
-	}
-	else
-	{
-		//	instancing for each position uv 
-		PixelPositions = VoxelBuffer.PositionsTextureUvs;
-	}
-	PixelPositions = new Float32Array(PixelPositions);
+	let PositionIndexes = GetIndexArray( VoxelBuffer.VoxelsUsed );
 
 	const Clear = [0,0,0,0];
 	const ReadBack = ReadBackOccupancy;
@@ -70,9 +60,10 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	const Shader = AssetManager.GetAsset(PixelTestShaderName,RenderContext);
 	
 	const Uniforms = {};
-	Uniforms.PixelPosition = PixelPositions;
+	Uniforms.PositionIndex = PositionIndexes;
 	Uniforms.OutputTextureSize = [w,h];
 	Uniforms.PositionsTexture = VoxelBuffer.PositionsTexture;
+	Uniforms.PositionsTextureSize = [Uniforms.PositionsTexture.GetWidth(),Uniforms.PositionsTexture.GetHeight()];
 	Uniforms.OccupancyMapWorldMin = OccupancyMapSize.WorldMin;
 	Uniforms.OccupancyMapWorldMax = OccupancyMapSize.WorldMax;
 	

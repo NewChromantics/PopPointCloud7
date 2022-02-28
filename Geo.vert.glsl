@@ -51,11 +51,20 @@ uniform float VelocityStretch;
 //		and if not moving at all they disapear
 #define USE_PREVIOUS_POSITIONS_TEXTURE 1
 //const bool UsePreviousPositionsTexture = true;
-in vec2 PhysicsPositionUv;
+//in vec2 PhysicsPositionUv;
 uniform sampler2D PhysicsPreviousPositionsTexture;
 uniform sampler2D PhysicsPositionsTexture;
 uniform vec2 PhysicsPositionsTextureSize;
 uniform sampler2D PhysicsVelocitysTexture;
+
+#define PhysicsPositionUv	GetPhysicsUv()
+vec2 GetPhysicsUv()
+{
+	float Index = float(gl_InstanceID);
+	float x = mod( Index, PhysicsPositionsTextureSize.x );
+	float y = floor( Index / PhysicsPositionsTextureSize.x );
+	return vec2(x,y) / PhysicsPositionsTextureSize;
+}
 
 mat4 GetLocalToWorldTransform()
 {

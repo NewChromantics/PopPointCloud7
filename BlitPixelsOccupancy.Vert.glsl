@@ -3,11 +3,10 @@ attribute vec2 TexCoord;
 
 uniform vec2 OutputTextureSize;
 
-//	instanced
-attribute vec2 PixelPosition;
-varying vec2 FragPixelPosition;
+attribute float PositionIndex;
 
 uniform sampler2D PositionsTexture;
+uniform vec2 PositionsTextureSize;
 
 varying float MapYNormalised;
 
@@ -17,7 +16,10 @@ uniform vec3 OccupancyMapWorldMax;
 
 vec3 GetWorldPosition()
 {
-	vec4 WorldPositionSample = texture2D( PositionsTexture, PixelPosition );
+	float x = mod( PositionIndex, PositionsTextureSize.x );
+	float y = floor( PositionIndex / PositionsTextureSize.x );
+	vec2 PixelPositionUv = vec2(x,y) / PositionsTextureSize;
+	vec4 WorldPositionSample = texture2D( PositionsTexture, PixelPositionUv );
 	return WorldPositionSample.xyz;
 }
 
@@ -62,7 +64,5 @@ void main()
 	gl_Position.w = 1.0;
 	
 	MapYNormalised = MapPosition.y;
-	
-	FragPixelPosition = PixelPosition;
 }
 
