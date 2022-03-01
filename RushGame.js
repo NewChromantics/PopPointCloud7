@@ -337,8 +337,13 @@ class VoxelBuffer_t
 	
 	AddVoxel(Position,Velocity,Colour,ModelPosition)
 	{
+		//	pad to 4
+		let Random = Math.random();
+		let BehaviourType = BEHAVIOUR_DEBRIS;
+		Position = [...Position,Random].slice(0,4);
+		Velocity = [...Velocity,BehaviourType].slice(0,4);
 		ModelPosition = ModelPosition || Position;
-		this.AddVoxels( [Position], [Velocity], [Colour], [ModelPosition] );
+		this.AddVoxels( Position, Velocity, Colour, ModelPosition );
 	}
 	
 	AddVoxels(Positions,Velocitys,Colours,ModelPositions)
@@ -356,15 +361,13 @@ class VoxelBuffer_t
 			
 		//	write into each buffer/texture
 		//	todo; part update textures
-		const PositionsBuffer = new Float32Array(w*h*4);
-		const VelocitysBuffer = new Float32Array(w*h*4);
-		PositionsBuffer.set( Positions, this.VoxelsUsed*4 );
-		VelocitysBuffer.set( Velocitys, this.VoxelsUsed*4 );
-		this.ShapePositionsTexture.WritePixels( w, h, PositionsBuffer, 'Float4' );
-		this.PositionsTexture.WritePixels( w, h, PositionsBuffer, 'Float4' );
-		this.PreviousPositionsTexture.WritePixels( w, h, PositionsBuffer, 'Float4' );
-		this.VelocitysTexture.WritePixels( w, h, VelocitysBuffer, 'Float4' );
-		this.PreviousVelocitysTexture.WritePixels( w, h, VelocitysBuffer, 'Float4' );
+		this.PositionsBuffer.set( Positions, this.VoxelsUsed*4 );
+		this.VelocitysBuffer.set( Velocitys, this.VoxelsUsed*4 );
+		this.ShapePositionsTexture.WritePixels( w, h, this.PositionsBuffer, 'Float4' );
+		this.PositionsTexture.WritePixels( w, h, this.PositionsBuffer, 'Float4' );
+		this.PreviousPositionsTexture.WritePixels( w, h, this.PositionsBuffer, 'Float4' );
+		this.VelocitysTexture.WritePixels( w, h, this.VelocitysBuffer, 'Float4' );
+		this.PreviousVelocitysTexture.WritePixels( w, h, this.VelocitysBuffer, 'Float4' );
 		
 		if ( Array.isArray(Colours) )
 			Colours = new Float32Array(Colours.flat(2));
