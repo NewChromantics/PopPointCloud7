@@ -18,7 +18,7 @@ import {GetZeroArray} from './PopEngine/PopApi.js'
 const ClearColour = [0,0,0,1];
 
 const EmptyScene = false;
-const EnableGpuPhysics = false;
+const EnableGpuPhysics = true;
 
 const BEHAVIOUR_STATIC = 0;
 const BEHAVIOUR_DEBRIS = 1;
