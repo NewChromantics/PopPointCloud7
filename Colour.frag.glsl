@@ -185,7 +185,9 @@ float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 	if ( SHADOW_ANY_ABOVE )
 	{
 		//	clear component data in our component, below us
-		OccupancyData.x /= (ThisComponent==0.0) ? (ThisCompSectionValue*10.0) : 1.0;	//	*10 to go one section up
+		//	gr: the extra 10.0 seems a bit awkward, we want 
+		//		it for <=floor y so floor surfaces get section 0. but its so close for everything else...
+		OccupancyData.x /= (ThisComponent==0.0) ? (ThisCompSectionValue*1.0) : 1.0;	//	*10 to go one section up
 		OccupancyData.y /= (ThisComponent==1.0) ? (ThisCompSectionValue*10.0) : 1.0;
 		OccupancyData.z /= (ThisComponent==2.0) ? (ThisCompSectionValue*10.0) : 1.0;
 		OccupancyData.w /= (ThisComponent==3.0) ? (ThisCompSectionValue*10.0) : 1.0;
@@ -212,7 +214,8 @@ float GetOccupancyMapShadowFactor(vec3 WorldPosition)
 					break;
 					
 				float SectionIndex = TestSection + (float(TestComp)*YSectionsPerComponentf);
-				bool IsAbove = (SectionIndex > ThisSection);
+				//	turn into >= if this is a floor/lowest section (bottom of world)
+				bool IsAbove = SectionIndex > (ThisSection - (TestComp==0?1.0:0.0));
 				float Hits = ( IsAbove && ComponentValue > 0.0) ? mod( ComponentValue, 10.0 ) : 0.0;
 				float HitDistance = ( Hits > 0.0 ) ? SectionIndex : 9999.0;
 				LowestHitSection = min( LowestHitSection, HitDistance );
