@@ -1,5 +1,7 @@
+#version 300 es
 precision highp float;
-varying vec4 FragColour;
+out vec4 OutFragColor;
+in vec4 FragColour;
 
 uniform bool MuteColour;
 uniform bool InvertColour;
@@ -9,14 +11,14 @@ uniform mat4 NormalDepthToViewDepthTransform;
 uniform mat4 CameraToWorldTransform;
 uniform mat4 ProjectionToCameraTransform;
 
-varying vec3 FragWorldPosition;
-varying vec2 FragLocalUv;
-varying vec3 FragLocalPosition;
-varying vec2 FragViewUv;
-varying vec3 ClipPosition;
-varying vec3 FragWorldNormal;
+in vec3 FragWorldPosition;
+in vec2 FragLocalUv;
+in vec3 FragLocalPosition;
+in vec2 FragViewUv;
+in vec3 ClipPosition;
+in vec3 FragWorldNormal;
 
-varying vec3 FragCameraPosition;
+in vec3 FragCameraPosition;
 
 
 const float BorderWidth = 0.08;
@@ -39,7 +41,7 @@ void main()
 	else
 		discard; 
 	
-	gl_FragColor = vec4(FragLocalUv,0,1.0);
+	OutFragColor = vec4(FragLocalUv,0,1.0);
 }
 
 
