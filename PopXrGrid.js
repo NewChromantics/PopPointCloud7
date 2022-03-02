@@ -2,7 +2,17 @@ import Pop from './PopEngine/PopEngine.js'
 import FrameCounter_t from './PopEngine/FrameCounter.js'
 import App_t from './RushGame.js'
 import {WaitForFrame} from './PopEngine/PopWebApi.js'
+
+
+//	detect whne XR has stopped rendering and only render desktop then
 let LastXrRenderTimeMs = null;
+
+
+const ForceXrLayerType = null;
+//const ForceXrLayerType = 'MultiView';
+//const ForceXrLayerType = 'StereoLayer';
+//const ForceXrLayerType = 'Classic';
+
 
 
 async function RenderLoop(Canvas,XrOnWaitForCallback)
@@ -49,7 +59,8 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 			try
 			{
 				LastXrRenderTimeMs = null;
-				const Device = await Pop.Xr.CreateDevice( RenderContext, GetXrRenderCommands, XrOnWaitForCallback );
+				const TrackedImages = null;
+				const Device = await Pop.Xr.CreateDevice( RenderContext, GetXrRenderCommands, XrOnWaitForCallback, TrackedImages, ForceXrLayerType );
 				App.BindXrControls( Device );
 
 				const Enders = [Device.WaitForEnd(),App.WaitForUserExit()];
