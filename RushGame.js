@@ -9,7 +9,8 @@ import Pop from './PopEngine/PopEngine.js'
 import GetBlitPixelTestRenderCommands from './BlitPixelsTest.js'
 import ParseMagicaVox from './PopEngine/MagicaVox.js'
 import {JoinTypedArrays} from './PopEngine/PopApi.js'
-import {GetZeroArray} from './PopEngine/PopApi.js'
+import {GetZeroFloatArray} from './PopEngine/PopApi.js'
+import DirtyBuffer from './PopEngine/DirtyBuffer.js'
 
 
 
@@ -372,7 +373,7 @@ class VoxelBuffer_t
 		if ( Array.isArray(Colours) )
 			Colours = new Float32Array(Colours.flat(2));
 		
-		this.Colours = JoinTypedArrays([this.Colours,Colours]);
+		this.Colours.push( Colours );
 		this.VoxelsUsed += VoxelCount;
 	}
 	
@@ -385,7 +386,7 @@ class VoxelBuffer_t
 		const Zero4s = new Float32Array(4*BufferCount).fill(0);
 
 		//	this buffer dicates instance count
-		this.Colours = new Float32Array(0);
+		this.Colours = new DirtyBuffer();
 		
 		//	todo: remove the need for these and add something to only partially update texture
 		//		will need it anyway when we can't read back the last pos/velocity bytes
@@ -927,8 +928,8 @@ function RenderBoundingBoxes(PushCommand,RenderContext,CameraUniforms,BoundingBo
 
 		const Uniforms = Object.assign({},CameraUniforms);
 		Uniforms.LocalToWorldTransform = LocalToWorlds;
-		Uniforms.WorldVelocity = GetZeroArray(3*LocalToWorlds.length);
-		Uniforms.Colour = GetZeroArray(4*LocalToWorlds.length);
+		Uniforms.WorldVelocity = GetZeroFloatArray(3*LocalToWorlds.length);
+		Uniforms.Colour = GetZeroFloatArray(4*LocalToWorlds.length);
 		Uniforms.VelocityStretch = 0.0;
 		
 		const State = {};
@@ -953,7 +954,7 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,Cub
 
 	const Uniforms = Object.assign({},CameraUniforms);
 	Uniforms.LocalToWorldTransform = CubeTransforms;
-	Uniforms.WorldVelocity = CubeVelocitys;
+	Uniforms.WorldVelocity = CubeVelocitys ? CubeVelocitys : GetZeroFloatArray(3*CubeTransforms.length);
 	Uniforms.Colour = Colours.slice( 0, CubeTransforms.length*4 );
 	Uniforms.VelocityStretch = CubeVelocityStretch;
 	
@@ -1577,7 +1578,7 @@ export default class App_t
 			for ( let Weapon of this.Game.GetWeapons() )
 			{
 				const Positions = Weapon.GetRenderLocalToWorldTransforms();
-				const Velocitys = new Array(Positions.length).fill([0,0,0]);
+				const Velocitys = null;
 				RenderCubes( PushCommand, RenderContext, CameraUniforms, Positions, Velocitys, this.Game.OccupancyTexture );
 			}
 		}

@@ -8,7 +8,7 @@ import Pop from './PopEngine/PopEngine.js'
 import AssetManager from './PopEngine/AssetManager.js'
 import {HasFetchFunction} from './PopEngine/AssetManager.js'
 import {CreateBlitQuadGeometry} from './PopEngine/CommonGeometry.js'
-import {GetIndexArray} from './PopEngine/PopApi.js'
+import {GetDirtyFloatIndexArray} from './PopEngine/DirtyBuffer.js'
 
 
 
@@ -49,7 +49,7 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	const w = OutputTexture.GetWidth();
 	const h = OutputTexture.GetHeight();
 	
-	let PositionIndexes = GetIndexArray( VoxelBuffer.VoxelsUsed );
+	let PositionIndexes = GetDirtyFloatIndexArray( VoxelBuffer.VoxelsUsed );
 
 	const Clear = [0,0,0,0];
 	const ReadBack = ReadBackOccupancy;
