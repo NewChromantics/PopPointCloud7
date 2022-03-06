@@ -9,6 +9,7 @@ import AssetManager from './PopEngine/AssetManager.js'
 import {HasFetchFunction} from './PopEngine/AssetManager.js'
 import {CreateBlitQuadGeometry} from './PopEngine/CommonGeometry.js'
 import {GetDirtyFloatIndexArray} from './PopEngine/DirtyBuffer.js'
+import DirtyBuffer from './PopEngine/DirtyBuffer.js'
 
 
 
@@ -22,6 +23,30 @@ async function CreateQuadTriangleBuffer(RenderContext)
 }
 
 let PixelTestShaderName = null;
+
+
+let PositionIndexArray = null;
+function GetPositionIndexDirtyArray(Length)
+{
+	if ( !PositionIndexArray )
+	{
+		const Values = new Array(Length).fill(0).map( (zero,index) => index );
+		const FloatValues = new Float32Array(Values);
+		PositionIndexArray = new DirtyBuffer( FloatValues );
+	}
+	
+	//	need something smarter than this? DirtyBuffer can handle that though
+	if ( PositionIndexArray.length < Length )
+	{
+		const FirstIndex = PositionIndexArray.length;
+		const Values = new Array(Length - PositionIndexArray.length).fill(0).map( (zero,index) => FirstIndex+index );
+		const FloatValues = new Float32Array(Values);
+		PositionIndexArray.push(FloatValues);
+	}
+	
+	return PositionIndexArray;
+}
+
 
 export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTexture,VoxelBuffer,OccupancyMapSize,ReadBackOccupancy)
 {
@@ -49,7 +74,7 @@ export default function GetBlitPixelTestRenderCommands(RenderContext,OutputTextu
 	const w = OutputTexture.GetWidth();
 	const h = OutputTexture.GetHeight();
 	
-	let PositionIndexes = GetDirtyFloatIndexArray( VoxelBuffer.VoxelsUsed );
+	let PositionIndexes = GetPositionIndexDirtyArray( VoxelBuffer.VoxelsUsed );
 
 	const Clear = [0,0,0,0];
 	const ReadBack = ReadBackOccupancy;

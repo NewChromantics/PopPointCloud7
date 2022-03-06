@@ -364,11 +364,15 @@ class VoxelBuffer_t
 		//	todo; part update textures
 		this.PositionsBuffer.set( Positions, this.VoxelsUsed*4 );
 		this.VelocitysBuffer.set( Velocitys, this.VoxelsUsed*4 );
-		this.ShapePositionsTexture.WritePixels( w, h, this.PositionsBuffer, 'Float4' );
+		this.ShapePositionsBuffer.set( Positions, this.VoxelsUsed*4 );
+		
+		this.ShapePositionsTexture.WritePixels( w, h, this.ShapePositionsBuffer, 'Float4' );
 		this.PositionsTexture.WritePixels( w, h, this.PositionsBuffer, 'Float4' );
-		this.PreviousPositionsTexture.WritePixels( w, h, this.PositionsBuffer, 'Float4' );
 		this.VelocitysTexture.WritePixels( w, h, this.VelocitysBuffer, 'Float4' );
-		this.PreviousVelocitysTexture.WritePixels( w, h, this.VelocitysBuffer, 'Float4' );
+		
+		//	do we NEED to do this? may want something to mark as new
+		//this.PreviousPositionsTexture.WritePixels( w, h, this.PositionsBuffer, 'Float4' );
+		//this.PreviousVelocitysTexture.WritePixels( w, h, this.VelocitysBuffer, 'Float4' );
 		
 		if ( Array.isArray(Colours) )
 			Colours = new Float32Array(Colours.flat(2));
@@ -388,21 +392,25 @@ class VoxelBuffer_t
 		//	this buffer dicates instance count
 		this.Colours = new DirtyBuffer();
 		
-		//	todo: remove the need for these and add something to only partially update texture
-		//		will need it anyway when we can't read back the last pos/velocity bytes
-		this.PositionsBuffer = new Float32Array(w*h*4);
-		this.VelocitysBuffer = new Float32Array(w*h*4);
+		
+		//	because we're update different textures
+		//	we need a buffer per texture otherwise they wont all get changes
+		//	we may ditch this for reading back data
+		//	or maybe we can just mark prev data as New
+		this.PositionsBuffer = new DirtyBuffer( new Float32Array(w*h*4) );
+		this.VelocitysBuffer = new DirtyBuffer( new Float32Array(w*h*4) );
+		this.ShapePositionsBuffer = new DirtyBuffer( new Float32Array(w*h*4) );
 		
 		
-		this.PreviousPositionsTexture = new Pop.Image();
+		this.PreviousPositionsTexture = new Pop.Image('PreviousPositionsTexture');
 		this.PreviousPositionsTexture.WritePixels( w, h, Zero4s, 'Float4' );
-		this.PositionsTexture = new Pop.Image();
+		this.PositionsTexture = new Pop.Image('PositionsTexture');
 		this.PositionsTexture.WritePixels( w, h, Zero4s, 'Float4' );
-		this.ShapePositionsTexture = new Pop.Image();
+		this.ShapePositionsTexture = new Pop.Image('ShapePositionsTexture');
 		this.ShapePositionsTexture.WritePixels( w, h, Zero4s, 'Float4' );
-		this.VelocitysTexture = new Pop.Image();
+		this.VelocitysTexture = new Pop.Image('VelocitysTexture');
 		this.VelocitysTexture.WritePixels( w, h, Zero4s, 'Float4' );
-		this.PreviousVelocitysTexture = new Pop.Image();
+		this.PreviousVelocitysTexture = new Pop.Image('PreviousVelocitysTexture');
 		this.PreviousVelocitysTexture.WritePixels( w, h, Zero4s, 'Float4' );
 		
 	}
@@ -1127,7 +1135,7 @@ class Game_t
 	OnFireWeapon(Weapon)
 	{
 		Weapon.Fire();
-		/*
+		
 		//	create game projectile as a voxel
 		const ForceMetresPerSec = 20;
 		const Position = Weapon.GetFirePosition();
@@ -1136,7 +1144,7 @@ class Game_t
 		const Velocity = Multiply3( Forward, [ForceMetresPerSec,ForceMetresPerSec,ForceMetresPerSec] );
 		const Colour = [0,1,0,1];
 		this.VoxelBuffer.AddVoxel( Position, Velocity, Colour );
-		*/
+		
 		
 	}
 		
