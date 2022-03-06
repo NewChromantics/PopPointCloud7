@@ -1138,12 +1138,15 @@ class Game_t
 		
 		//	create game projectile as a voxel
 		const ForceMetresPerSec = 20;
-		const Position = Weapon.GetFirePosition();
-		const Forward = Weapon.Forward;
-		
-		const Velocity = Multiply3( Forward, [ForceMetresPerSec,ForceMetresPerSec,ForceMetresPerSec] );
-		const Colour = [0,1,0,1];
-		this.VoxelBuffer.AddVoxel( Position, Velocity, Colour );
+
+		for ( let i=0;	i<10;	i++ )
+		{ 	
+			const Position = Weapon.GetFirePosition();
+			const Forward = Weapon.Forward;
+			const Velocity = Multiply3( Forward, [ForceMetresPerSec,ForceMetresPerSec,ForceMetresPerSec] );
+			const Colour = [0,1,0,1];
+			this.VoxelBuffer.AddVoxel( Position, Velocity, Colour );
+		}
 		
 		
 	}
