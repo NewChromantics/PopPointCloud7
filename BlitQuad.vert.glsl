@@ -1,6 +1,7 @@
+#version 300 es
 precision highp float;
-attribute vec2 TexCoord;
-varying vec2 Uv;
+in vec2 TexCoord;
+out vec2 Uv;
 
 void main()
 {

@@ -1,5 +1,8 @@
+#version 300 es
 precision highp float;
-varying vec2 Uv;
+out vec4 FragColor;
+
+in vec2 Uv;
 uniform sampler2D PreviousVelocitysTexture;
 uniform sampler2D PreviousPositionsTexture;		//	previous positions
 uniform sampler2D PositionsTexture;				//	current positions
@@ -30,7 +33,45 @@ uniform vec4 Random4;	//	a random number per frame (not per voxel!)
 const float FloorY = 0.0;
 #define NearFloorY	(FloorY+0.02)
 
+uniform float DropAll;
+#define DROP_ALL	(DropAll>0.5)
+
 #define mat_identity	mat4(1,0,0,0,	0,1,0,0,	0,0,1,0,	0,0,0,1 )
+
+
+
+uniform sampler2D OccupancyMapTexture;
+uniform vec2 OccupancyMapTextureSize;
+uniform vec3 OccupancyMapWorldMin;
+uniform vec3 OccupancyMapWorldMax;
+const int YSectionsPerComponent = 7;
+const float YSectionsPerComponentf = float(YSectionsPerComponent);
+const int YSectionComponents = 4;
+#define YSectionCount	(YSectionsPerComponent*YSectionComponents)
+#define YSectionCountf	float(YSectionCount)
+
+
+float GetSectionValue(float Section)
+{
+	//	pow(10,0)==1 ??
+	//	pow is more expensive, but maybe we can avoid the if's
+	//return pow( 10.0, Section );
+	if ( Section == 0.0 )		return 1.0;
+	if ( Section == 1.0 )		return 10.0;
+	if ( Section == 2.0 )		return 100.0;
+	if ( Section == 3.0 )		return 1000.0;
+	if ( Section == 4.0 )		return 10000.0;
+	if ( Section == 5.0 )		return 100000.0;
+	if ( Section == 6.0 )		return 1000000.0;
+	if ( Section == 7.0 )		return 10000000.0;
+	if ( Section == 8.0 )		return 100000000.0;
+	if ( Section == 9.0 )		return 1000000000.0;
+	if ( Section == 10.0 )	return 10000000000.0;
+	if ( Section == 11.0 )	return 100000000000.0;
+	return 0.0;
+}
+
+
 
 struct Behaviour_t
 {
@@ -199,10 +240,95 @@ vec3 GetSpringForce(vec3 Position,float Random,vec3 ShapePosition,Behaviour_t Be
 	return Spring;
 }
 
+float Range(float Min,float Max,float Value)
+{
+	return (Value-Min) / (Max-Min);
+}
+
+float Range01(float Min,float Max,float Value)
+{
+	return clamp( Range( Min, Max, Value ), 0.0, 1.0 );
+}
+
+vec3 GetOccupancyMapPosition(vec3 WorldPosition)
+{
+	vec3 WorldUv;
+	WorldUv.x = Range01( OccupancyMapWorldMin.x, OccupancyMapWorldMax.x, WorldPosition.x );
+	WorldUv.y = Range01( OccupancyMapWorldMin.y, OccupancyMapWorldMax.y, WorldPosition.y );
+	WorldUv.z = Range01( OccupancyMapWorldMin.z, OccupancyMapWorldMax.z, WorldPosition.z );
+	return WorldUv;
+}
+
+vec3 OccupancyPositionToWorld(vec2 MapPx,float Section)
+{
+	MapPx /= OccupancyMapTextureSize;
+	Section /= YSectionCountf;
+	vec3 WorldPosition;
+	WorldPosition.x = mix( OccupancyMapWorldMin.x, OccupancyMapWorldMax.x, MapPx.x );
+	WorldPosition.y = mix( OccupancyMapWorldMin.y, OccupancyMapWorldMax.y, Section );
+	WorldPosition.z = mix( OccupancyMapWorldMin.z, OccupancyMapWorldMax.z, MapPx.y );
+	return WorldPosition;
+}
+
+//	x,y,sectionmult
+vec3 GetOccupancyMapPx(vec3 WorldPosition)
+{
+	vec3 MapUv = GetOccupancyMapPosition(WorldPosition);
+	vec2 MapPx = floor( MapUv.xz * OccupancyMapTextureSize );
+	float Section = floor(MapUv.y * YSectionCountf);
+	//float SectionValue = GetSectionValue(Section);
+	return vec3( MapPx, Section );
+}
+
+bool IsOccupied(vec2 MapPx,float Section)
+{
+	vec4 OccupancyData = texelFetch( OccupancyMapTexture, ivec2(MapPx), 0 );
+	
+	float Component = floor( Section / YSectionsPerComponentf );
+	float CompSection = mod( Section, YSectionsPerComponentf );
+	float CompSectionValue = GetSectionValue( CompSection );
+	
+	float DataValue = OccupancyData[int(Component)];
+	DataValue = floor( DataValue / CompSectionValue );
+	DataValue = mod( DataValue, 10.0 );
+	return DataValue > 1.0;
+}
+
+//	intersection.xyz + valid
+vec4 GetOccupancyHit(vec3 Position,vec3 Velocity)
+{
+	//	find where we are now
+	vec3 NextPosition = Position + (Velocity *Timestep);
+	vec3 OldPos = GetOccupancyMapPx(Position);
+	vec3 NewPos = GetOccupancyMapPx(NextPosition);
+	if ( OldPos == NewPos )
+		return vec4(0);
+	
+	//	walk over map
+	//	steps = hypotenuse
+	float CellSteps = length(OldPos-NewPos);
+	#define MAX_MAP_STEPS	10
+	for ( int s=1;	s<MAX_MAP_STEPS;	s++ )
+	{
+		//	lerp from old pos to new pos, and snap to cell indexes
+		vec3 StepPos = mix( OldPos, NewPos, float(s)/float(MAX_MAP_STEPS-1) );
+		StepPos = ceil(StepPos);
+		if ( StepPos == OldPos )
+			continue;
+		if ( IsOccupied( StepPos.xy, StepPos.z ) )
+		{
+			vec3 WorldPos = OccupancyPositionToWorld( StepPos.xy, StepPos.z );
+			return vec4(WorldPos,1.0);
+		}
+	}
+	return vec4(0);
+}
+		
+
 void main()
 {
-	vec4 Velocity = texture2D( PreviousVelocitysTexture, SampleUv );
-	vec3 Position = texture2D( PositionsTexture, SampleUv ).xyz;
+	vec4 Velocity = texture( PreviousVelocitysTexture, SampleUv );
+	vec3 Position = texture( PositionsTexture, SampleUv ).xyz;
 
 	//	apply drag
 	vec3 Damping = vec3( 1.0 - AirDrag );
@@ -219,13 +345,14 @@ void main()
 	//	spring to shape position
 	if ( Behaviour.SpringForceMinMax.x != 0.0 )
 	{
-		vec4 ShapePosition = texture2D( ShapePositionsTexture, SampleUv );
+		vec4 ShapePosition = texture( ShapePositionsTexture, SampleUv );
 		float Random = ShapePosition.w;
 		ShapePosition = Behaviour.ShapeLocalToWorldTransform * vec4(ShapePosition.xyz,1.0);
 		vec3 SpringForce = GetSpringForce( Position, Random, ShapePosition.xyz, Behaviour );
 		Force += SpringForce;
 	}
-
+	
+	
 	//	do collisions with projectiles (add to force)
 	//	and enable graivty
 	for ( int p=0;	p<MAX_PROJECTILES;	p++ )
@@ -254,12 +381,40 @@ void main()
 	}
 
 	Force += GravityForce;
+
+	//	do collisions with world
+	vec3 NewVelocity = Velocity.xyz + (Force*Timestep);
+	if ( length(NewVelocity) > 0.0 )
+	{
+		//	get next occupancy position
+		vec4 OccupancyHit = GetOccupancyHit( Position, NewVelocity );
+		if ( OccupancyHit.w > 0.0 )
+		{
+			vec3 NewDirection = -normalize(NewVelocity);
+			Velocity.xyz = NewDirection * length(Velocity);
+			Force = NewDirection * length(Force);
+			
+			//	stop
+			Force = vec3(0);
+			Velocity.xyz = vec3(0);
+			//Behaviour.Type = Behaviour_Static.Type;
+
+			Position = OccupancyHit.xyz;
+		}
+	}
+
+
+	if ( DROP_ALL )
+	{
+		Behaviour.Type = Behaviour_Debris.Type;
+	}
+	
 	
 	
 	//	apply forces
 	Velocity.xyz += Force * Timestep;
 	Velocity.w = GetBehaviourTypef(Behaviour);
 	
-	gl_FragColor = Velocity;
+	FragColor = Velocity;
 }
 

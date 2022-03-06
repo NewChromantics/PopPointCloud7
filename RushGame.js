@@ -14,6 +14,8 @@ import DirtyBuffer from './PopEngine/DirtyBuffer.js'
 
 
 
+let DropAll = false;
+
 //	adreno (quest2) has a hardware optimised clear for 0,0,0 and 1,1,1
 //	somehow this should be passed from XR api/camera (default clear?)
 const ClearColour = [0,0,0,1];
@@ -45,8 +47,8 @@ const OccupancyTextureWidth = 128;
 const OccupancyTextureHeight = 128;
 const OccupancyMapSize = 
 {
-	WorldMin:[-7,-0.1,0],
-	WorldMax:[4,2,-6],
+	WorldMin:[-7,-0.06,0],
+	WorldMax:[4,1.6,-6],
 };
 
 async function CreateCubeTriangleBuffer(RenderContext)
@@ -107,7 +109,7 @@ let BlitUpdatePositionsShader;
 let BlitUpdateVelocitysShader;
 let BlitUpdateVelocitysAndPositionsShader;
 
-function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projectiles)
+function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projectiles,OccupancyTexture)
 {
 	const PositionTexture = VoxelBuffer.PositionsTexture;
 	const PreviousPositionsTexture = VoxelBuffer.PreviousPositionsTexture;
@@ -190,7 +192,16 @@ function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projec
 		Uniforms.TexelSize = TexelSize;
 		Uniforms.CubeSize = CubeSize;
 		Uniforms.Random4 = [Math.random(),Math.random(),Math.random(),Math.random()];
+		Uniforms.DropAll = DropAll;
 		
+		if ( OccupancyTexture )
+		{
+		Uniforms.OccupancyMapWorldMin = OccupancyMapSize.WorldMin;
+		Uniforms.OccupancyMapWorldMax = OccupancyMapSize.WorldMax;
+		Uniforms.OccupancyMapTexture = OccupancyTexture;
+		Uniforms.OccupancyMapTextureSize = [OccupancyTexture.GetWidth(),OccupancyTexture.GetHeight()];
+		}
+
 		if ( UseMrt )
 		{
 			Commands.push(['SetRenderTarget',[VelocitysTexture,PositionTexture]]);
@@ -1134,21 +1145,24 @@ class Game_t
 	
 	OnFireWeapon(Weapon)
 	{
-		Weapon.Fire();
+		//Weapon.Fire();
 		
 		//	create game projectile as a voxel
-		const ForceMetresPerSec = 20;
-
 		for ( let i=0;	i<10;	i++ )
-		{ 	
+		{
+			const ForceMetresPerSec = Lerp( 15, 25, Math.random() );
 			const Position = Weapon.GetFirePosition();
-			const Forward = Weapon.Forward;
+			let Forward = Weapon.Forward;
+			let Randomness = 0.2;
+			let Rand3 = ([0,0,0]).map( x=>Math.random()-0.5 ).map( x=>x*Randomness );
+			Forward = Add3( Forward, Rand3 );
 			const Velocity = Multiply3( Forward, [ForceMetresPerSec,ForceMetresPerSec,ForceMetresPerSec] );
 			const Colour = [0,1,0,1];
 			this.VoxelBuffer.AddVoxel( Position, Velocity, Colour );
 		}
 		
-		
+		if ( Pop.GetTimeNowMs() > 10*1000 )
+			DropAll = true;
 	}
 		
 	OnDesktopFireDown()
@@ -1219,12 +1233,6 @@ class Game_t
 		const Projectiles = [];
 		this.EnumProjectiles( p => Projectiles.push(p) );
 		
-		const Commands = [];
-		{
-			const SomeCommands = GetRenderCommandsUpdatePhysicsTextures( RenderContext, this.VoxelBuffer, Projectiles );
-			Commands.push(...SomeCommands);
-		}
-		
 		if ( !this.OccupancyTexture )
 		{
 			this.OccupancyTexture = new Pop.Image();
@@ -1233,6 +1241,12 @@ class Game_t
 			let rgba = new Array(w*h).fill([0,0,0,0]);
 			rgba = new Float32Array(rgba.flat(2));
 			this.OccupancyTexture.WritePixels(w,h,rgba,'Float4');
+		}
+
+		const Commands = [];
+		{
+			const SomeCommands = GetRenderCommandsUpdatePhysicsTextures( RenderContext, this.VoxelBuffer, Projectiles, this.OccupancyTexture );
+			Commands.push(...SomeCommands);
 		}
 		
 		if ( GenerateOccupancyTexture )

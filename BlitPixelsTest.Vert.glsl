@@ -1,11 +1,13 @@
+#version 300 es
+
 precision highp float;
-attribute vec2 TexCoord;
+in vec2 TexCoord;
 
 uniform vec2 OutputTextureSize;
 
 //	instanced
-attribute vec2 PixelPosition;
-varying vec2 FragPixelPosition;
+in vec2 PixelPosition;
+out vec2 FragPixelPosition;
 
 
 void main()
