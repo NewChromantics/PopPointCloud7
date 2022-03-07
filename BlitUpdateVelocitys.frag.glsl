@@ -295,9 +295,10 @@ bool IsOccupied(vec2 MapPx,float Section)
 }
 
 //	intersection.xyz + valid
-vec4 GetOccupancyHit(vec3 Position,vec3 Velocity)
+vec4 GetOccupancyHit(vec3 Position,vec3 Velocity,out vec3 HitNormal)
 {
 	//	find where we are now
+	HitNormal = vec3(0,1,0);
 	vec3 NextPosition = Position + (Velocity *Timestep);
 	vec3 OldPos = GetOccupancyMapPx(Position);
 	vec3 NewPos = GetOccupancyMapPx(NextPosition);
@@ -307,7 +308,8 @@ vec4 GetOccupancyHit(vec3 Position,vec3 Velocity)
 	//	walk over map
 	//	steps = hypotenuse
 	float CellSteps = length(OldPos-NewPos);
-	#define MAX_MAP_STEPS	10
+	#define MAX_MAP_STEPS	5
+	vec3 PrevStepPos = OldPos;
 	for ( int s=1;	s<MAX_MAP_STEPS;	s++ )
 	{
 		//	lerp from old pos to new pos, and snap to cell indexes
@@ -317,9 +319,11 @@ vec4 GetOccupancyHit(vec3 Position,vec3 Velocity)
 			continue;
 		if ( IsOccupied( StepPos.xy, StepPos.z ) )
 		{
-			vec3 WorldPos = OccupancyPositionToWorld( StepPos.xy, StepPos.z );
+			//vec3 WorldPos = OccupancyPositionToWorld( StepPos.xy, StepPos.z );
+			vec3 WorldPos = OccupancyPositionToWorld( PrevStepPos.xy, PrevStepPos.z );
 			return vec4(WorldPos,1.0);
 		}
+		PrevStepPos = StepPos;
 	}
 	return vec4(0);
 }
@@ -328,7 +332,9 @@ vec4 GetOccupancyHit(vec3 Position,vec3 Velocity)
 void main()
 {
 	vec4 Velocity = texture( PreviousVelocitysTexture, SampleUv );
-	vec3 Position = texture( PositionsTexture, SampleUv ).xyz;
+	vec4 PositionAndRandom = texture( PositionsTexture, SampleUv );
+	vec3 Position = PositionAndRandom.xyz;
+	float Random = PositionAndRandom.w;
 
 	//	apply drag
 	vec3 Damping = vec3( 1.0 - AirDrag );
@@ -346,7 +352,7 @@ void main()
 	if ( Behaviour.SpringForceMinMax.x != 0.0 )
 	{
 		vec4 ShapePosition = texture( ShapePositionsTexture, SampleUv );
-		float Random = ShapePosition.w;
+		//float Random = ShapePosition.w;
 		ShapePosition = Behaviour.ShapeLocalToWorldTransform * vec4(ShapePosition.xyz,1.0);
 		vec3 SpringForce = GetSpringForce( Position, Random, ShapePosition.xyz, Behaviour );
 		Force += SpringForce;
@@ -372,11 +378,11 @@ void main()
 		//	hit floor
 		if ( FloorForce.w > 0.0 )
 		{
-			GravityForce = vec3(0,0,0);
+			GravityForce = vec3(0);
 			//GravityMult = 0.0;
 			Force += FloorForce.xyz;
 			Position.y = FloorY;
-			Velocity = vec4(0,0,0,0);
+			Velocity = vec4(0);
 		}
 	}
 
@@ -387,16 +393,36 @@ void main()
 	if ( length(NewVelocity) > 0.0 )
 	{
 		//	get next occupancy position
-		vec4 OccupancyHit = GetOccupancyHit( Position, NewVelocity );
+		vec3 HitNormal;
+		vec4 OccupancyHit = GetOccupancyHit( Position, NewVelocity, HitNormal );
 		if ( OccupancyHit.w > 0.0 )
 		{
-			vec3 NewDirection = -normalize(NewVelocity);
-			Velocity.xyz = NewDirection * length(Velocity);
-			Force = NewDirection * length(Force);
+			//	act like floor
+			//	reflect off... something
+			vec3 Bounce = reflect( Velocity.xyz, HitNormal );
+			//	this causes infinite bouncing back and forth
+			//vec3 Bounce = -Velocity.xyz;
+			
+			vec3 Random3 = (hash31(Random) - vec3(0.5))*2.0;
+			//Bounce += Random4.xyz * 0.001;
+			Bounce += Random3 * 0.501;
+			//Bounce += sign(Bounce)*(Random4.xyz) * 0.3;
+			//Bounce += sign(Bounce)*(Random3) * 0.3;
+			Bounce *= 1.0/Timestep;
+			//Bounce *= 1.0 - mix(FloorDragMin,FloorDragMax,Random4.x);
+			Bounce *= 1.0 - FloorDragMax;
 			
 			//	stop
 			Force = vec3(0);
 			Velocity.xyz = vec3(0);
+			Force = Bounce.xyz;
+			
+			//	like with the floor, if we're going downwards, we want to stick, not keep bouncing back up
+			if ( dot(normalize(NewVelocity),vec3(0,-1,0)) > 0.99 )
+			{
+				Force = vec3(0);
+			}
+			//	stick!
 			//Behaviour.Type = Behaviour_Static.Type;
 
 			Position = OccupancyHit.xyz;
