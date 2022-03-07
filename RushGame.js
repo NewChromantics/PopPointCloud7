@@ -48,7 +48,7 @@ const OccupancyTextureHeight = 128;
 const OccupancyMapSize = 
 {
 	WorldMin:[-7,-0.06,0],
-	WorldMax:[4,1.6,-6],
+	WorldMax:[4,1.80,-6],
 };
 
 async function CreateCubeTriangleBuffer(RenderContext)
@@ -557,6 +557,11 @@ class VoxelShape_t
 
 class Weapon_t
 {
+	constructor()
+	{
+		this.OnFired = function(){};
+	}
+	
 	Tick(TimestepSecs,PositionInsideBounds)
 	{
 	}
@@ -886,6 +891,7 @@ class WeaponGun_t extends Weapon_t
 	{
 		this.CreateProjectile();
 		this.LastFireTimeMs = Pop.GetTimeNowMs();
+		this.OnFired(this);
 	}
 	
 	Tick(TimestepSecs,PositionInsideBounds)
@@ -1116,6 +1122,23 @@ class Game_t
 		return Object.values(this.Weapons);
 	}
 	
+	OnWeaponFired(Weapon)
+	{
+		//	create game projectile as a voxel
+		for ( let i=0;	i<10;	i++ )
+		{
+			const ForceMetresPerSec = Lerp( 15, 25, Math.random() );
+			const Position = Weapon.GetFirePosition();
+			let Forward = Weapon.Forward;
+			let Randomness = 0.3;
+			let Rand3 = ([0,0,0]).map( x=>Math.random()-0.5 ).map( x=>x*Randomness );
+			Forward = Add3( Forward, Rand3 );
+			const Velocity = Multiply3( Forward, [ForceMetresPerSec,ForceMetresPerSec,ForceMetresPerSec] );
+			const Colour = [0,1,0,1];
+			this.VoxelBuffer.AddVoxel( Position, Velocity, Colour );
+		}
+	}
+	
 	GetWeapon(Name)
 	{
 		if ( !this.Weapons[Name] )
@@ -1124,6 +1147,7 @@ class Game_t
 			console.log(`Creating weapon ${Name}`);
 			const WeaponType = Name.startsWith('left') ? WeaponWreckingProjection_t : WeaponGun_t;
 			this.Weapons[Name] = new WeaponType(Offset);
+			this.Weapons[Name].OnFired = this.OnWeaponFired.bind(this);
 		}
 		return this.Weapons[Name];
 	}
@@ -1145,24 +1169,8 @@ class Game_t
 	
 	OnFireWeapon(Weapon)
 	{
-		//Weapon.Fire();
+		Weapon.Fire();
 		
-		//	create game projectile as a voxel
-		for ( let i=0;	i<10;	i++ )
-		{
-			const ForceMetresPerSec = Lerp( 15, 25, Math.random() );
-			const Position = Weapon.GetFirePosition();
-			let Forward = Weapon.Forward;
-			let Randomness = 0.2;
-			let Rand3 = ([0,0,0]).map( x=>Math.random()-0.5 ).map( x=>x*Randomness );
-			Forward = Add3( Forward, Rand3 );
-			const Velocity = Multiply3( Forward, [ForceMetresPerSec,ForceMetresPerSec,ForceMetresPerSec] );
-			const Colour = [0,1,0,1];
-			this.VoxelBuffer.AddVoxel( Position, Velocity, Colour );
-		}
-		
-		if ( Pop.GetTimeNowMs() > 10*1000 )
-			DropAll = true;
 	}
 		
 	OnDesktopFireDown()
@@ -1170,6 +1178,9 @@ class Game_t
 		const Weapon = this.GetWeapon('Desktop');
 		//Weapon.Fire();
 		this.OnFireWeapon(Weapon);
+		
+		if ( Pop.GetTimeNowMs() > 2*1000 )
+			DropAll = true;
 	}
 	
 	OnDesktopFireUp()
@@ -1425,7 +1436,8 @@ export default class App_t
 	
 	BindXrControls(Device)
 	{
-		const ExitButtons = [4,5,'A','B','X','Y'];
+		const ExitButtons = [5,'B','X','Y'];
+		const DropButtons = [4,'A'];
 		
 		const Game = this.Game;
 		Device.OnMouseMove = function(xyz,Button,InputName,Transform,ExtraData)
@@ -1476,6 +1488,8 @@ export default class App_t
 			//	if user presses a face button exit app
 			if ( ExitButtons.includes(Button) )
 				this.UserExitPromise.Resolve();
+			if ( DropButtons.includes(Button) )
+				DropAll = true;
 			//console.log(`button down ${Button}`);
 		
 			//	update position as move isn't called when mouse is down
