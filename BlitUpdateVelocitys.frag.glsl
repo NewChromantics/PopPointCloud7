@@ -347,7 +347,8 @@ void main()
 	//	accumulate forces
 	vec3 GravityForce = vec3(0,Behaviour.GravityForce,0);
 	vec3 Force = vec3(0,0,0);
-
+    
+    /*gr: this has stopped working... producing NAN
 	//	spring to shape position
 	if ( Behaviour.SpringForceMinMax.x != 0.0 )
 	{
@@ -357,7 +358,7 @@ void main()
 		vec3 SpringForce = GetSpringForce( Position, Random, ShapePosition.xyz, Behaviour );
 		Force += SpringForce;
 	}
-	
+     */
 	
 	//	do collisions with projectiles (add to force)
 	//	and enable graivty
