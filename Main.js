@@ -26,7 +26,10 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 	
 	async function AppThread()
 	{
-		await App.GameIteration();
+		//while(App)
+		{
+			await App.GameIteration();
+		}
 	}
 	AppThread();
 	

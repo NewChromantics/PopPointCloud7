@@ -13,6 +13,7 @@ import {GetZeroFloatArray} from './PopEngine/PopApi.js'
 import DirtyBuffer from './PopEngine/DirtyBuffer.js'
 import VoxelBuffer_t from './VoxelBuffer.js'
 import {CreateColourTexture} from './PopEngine/Images.js'
+import OctreeNode from './PopEngine/Octree.js'
 
 const NullTexture = CreateColourTexture([0,0,0,0]);
 
@@ -21,7 +22,6 @@ const NullTexture = CreateColourTexture([0,0,0,0]);
 const ClearColour = ([86, 201, 209,255]).map( x => x/255 );
 
 
-const CubeVelocityStretch = 2.0;
 const FloorColour = [24, 64, 196,255].map(x=>(x/255));
 //const FloorColour = [0.1,0.3,0.4,1.0];
 const RenderFloor = true;
@@ -42,6 +42,23 @@ const OccupancyMapSize =
 	WorldMin:[-7,-0.06,0],
 	WorldMax:[4,1.80,-6],
 };
+
+function GetAllBoundingBoxes(Octree)
+{
+	let Boxes = [];
+	function OnNode(Box)
+	{
+		Boxes.push(Box);
+	}
+	Octree.EnumBoundingBoxes(OnNode);
+	
+	function AddSize(Box)
+	{
+		Box.Size = Subtract3( Box.Max, Box.Min );
+	}
+	Boxes.forEach( AddSize );
+	return Boxes;
+}
 
 async function CreateCubeTriangleBuffer(RenderContext)
 {
@@ -411,7 +428,6 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,Cub
 	Uniforms.LocalToWorldTransform = CubeTransforms;
 	Uniforms.WorldVelocity = CubeVelocitys ? CubeVelocitys : GetZeroFloatArray(3*CubeTransforms.length);
 	Uniforms.Colour = Colours.slice( 0, CubeTransforms.length*4 );
-	Uniforms.VelocityStretch = CubeVelocityStretch;
 	
 	Uniforms.OccupancyMapWorldMin = OccupancyMapSize.WorldMin;
 	Uniforms.OccupancyMapWorldMax = OccupancyMapSize.WorldMax;
@@ -439,7 +455,6 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 	const Uniforms = Object.assign({},CameraUniforms);
 	//Uniforms.LocalToWorldTransform = CubeTransforms;
 	Uniforms.Colour = VoxelsBuffer.Colours;
-	Uniforms.VelocityStretch = CubeVelocityStretch;
 
 	let PositionsTexture = VoxelsBuffer.PositionsTexture;
 	let VelocitysTexture = VoxelsBuffer.VelocitysTexture;
@@ -486,91 +501,6 @@ function RenderDebugQuad( PushCommand, RenderContext, DebugTexture, Index, DrawT
 	PushCommand(['Draw',Geo,Shader,Uniforms,State]);
 }
 
-/*
-	async LoadLevel()
-	{
-		//	we store all our voxels in one big buffer
-		this.VoxelBuffer = new VoxelBuffer_t();
-		
-		const LoadFile = `Models/Taxi.vox`;
-		//const LoadFile = `Models/Skeleton.vox`;
-		//const LoadFile = false;
-	
-		
-		if ( LoadFile )
-		{
-			
-			
-	}
-	*/
-class VoxelScene
-{
-	constructor(Filename)
-	{
-		this.VoxelBuffer = new VoxelBuffer_t();
-		this.LoadVoxelBuffer(Filename).catch( console.error);
-	}
-	
-	async LoadVoxelBuffer(Filename)
-	{
-		const VoxContents = await Pop.FileSystem.LoadFileAsArrayBufferAsync(Filename);
-		
-		const MergedGeometry = {};
-		function OnGeometry(Geometry)
-		{
-			for ( let Attrib in Geometry )
-			{
-				let Data = MergedGeometry[Attrib] || [];
-				Data = Data.concat( Geometry[Attrib] );
-				MergedGeometry[Attrib] = Data;
-			}
-		}
-		await ParseMagicaVox( VoxContents, OnGeometry );
-		const Geometry = MergedGeometry;
-		
-		const SkipEveryX = 0;
-		
-		function TweakPosition(xyz,Index)
-		{
-			if ( SkipEveryX!=0 && Index % SkipEveryX == 0 )
-				return null;
-			let Scale = 2;
-			Scale = [CubeSize*Scale,CubeSize*Scale,CubeSize*Scale];
-			
-			xyz = Multiply3( xyz, Scale );
-			xyz = Add3( xyz, VoxelCenterPosition );
-			return xyz;
-		}
-		
-		function TweakColour(rgba,Index)
-		{
-			if ( SkipEveryX!=0 && Index % SkipEveryX == 0 )
-				return null;
-			let ToneChange = (Math.random()-0.5)*0.05;
-			rgba[0] += ToneChange;
-			rgba[1] += ToneChange;
-			rgba[2] += ToneChange;
-			return rgba;
-		}
-		Geometry.Colours = Geometry.Colours.map(TweakColour).filter( x=>x != null );
-		Geometry.Positions = Geometry.Positions.map(TweakPosition).filter( x=>x != null );
-		
-		Geometry.Colours = new Float32Array(Geometry.Colours.flat(2));
-		
-		this.VoxelBuffer.LoadPositions( Geometry.Positions, Geometry.Colours, VoxelCenterPosition, 0.0 );
-	}
-	
-	GetDebugTextures()
-	{
-		return [this.VoxelBuffer.PositionsTexture];
-		return [];
-	}
-	
-	GetRenderCommands(PushCommand,RenderContext,CameraUniforms)
-	{
-		RenderVoxelBufferCubes( PushCommand, RenderContext, CameraUniforms, this.VoxelBuffer, null );
-	}
-}
 
 export default class App_t
 {
@@ -579,7 +509,9 @@ export default class App_t
 		this.RegisterAssets();
 		this.UserExitPromise = Pop.CreatePromise();
 		
-		this.VoxelScene = new VoxelScene(`Models/Taxi.vox`);
+		this.VoxelBuffer = null;
+		this.Octree = null;
+		this.WaitForRenderContextPromise = Pop.CreatePromise();
 	}
 	
 	get Camera()	{	return AppCamera;	}
@@ -587,6 +519,11 @@ export default class App_t
 	async WaitForUserExit()
 	{
 		return this.UserExitPromise;
+	}
+	
+	async WaitForRenderContext()
+	{
+		return this.WaitForRenderContextPromise;
 	}
 	
 	RegisterAssets()
@@ -739,9 +676,10 @@ export default class App_t
 			RenderCommands.push(Command);
 		}
 
-		if ( this.VoxelScene )
-			this.VoxelScene.GetRenderCommands( PushCommand, RenderContext, CameraUniforms );
-
+		if ( this.VoxelBuffer )
+		{
+			RenderVoxelBufferCubes( PushCommand, RenderContext, CameraUniforms, this.VoxelBuffer, null );
+		}
 
 		
 		{
@@ -770,9 +708,8 @@ export default class App_t
 		if ( RenderDebugQuads )
 		{
 			const DebugTextures = [];
-			
-			if ( this.VoxelScene )
-				DebugTextures.push( ...this.VoxelScene.GetDebugTextures() );
+			if ( this.VoxelBuffer )
+				DebugTextures.push( this.VoxelBuffer.PositionsTexture );
 			
 			function Render(DebugTexture,Index)
 			{
@@ -782,9 +719,10 @@ export default class App_t
 			DebugTextures.forEach( Render );
 		}
 
-		if ( RenderOctree )
+		if ( this.Octree )
 		{
-			const BoundingBoxes = GetBoundingBoxesFromOccupancy(this.Game.OccupancyTexture);
+			//const BoundingBoxes = GetBoundingBoxesFromOccupancy(this.Game.OccupancyTexture);
+			const BoundingBoxes = GetAllBoundingBoxes(this.Octree);
 			RenderBoundingBoxes( PushCommand, RenderContext, CameraUniforms, BoundingBoxes );
 		}
 
@@ -797,9 +735,88 @@ export default class App_t
 	
 	async GpuTick(RenderContext,TimestepSecs)
 	{
+		this.WaitForRenderContextPromise.Resolve(RenderContext);
 	}
 	
 	async GameIteration()
 	{
+		await this.GenerateSdfThread(`Models/Taxi.vox`);
+	}
+	
+	//	this is a pipeline, this is the bit which we should abstract
+	async GenerateSdfThread(Filename)
+	{
+		this.VoxelBuffer = await this.LoadVoxelBuffer(Filename);
+		this.Octree = await this.GenerateOctreeFromVoxelBuffer(this.VoxelBuffer);
+	}
+	
+	async GenerateOctreeFromVoxelBuffer(VoxelBuffer)
+	{
+		const PositionsImage = VoxelBuffer.PositionsTexture;
+		//	future plan for depthtexture -> world
+		const PositionToWorldTransform = CreateTranslationMatrix(0,0,0);
+		return await this.GenerateOctreeFromPositions( PositionsImage, PositionToWorldTransform );
+	}
+
+	async GenerateOctreeFromPositions(PositionsImage,PositionToWorldTransform)
+	{
+		const BoundingBox =
+		{
+		Min:OccupancyMapSize.WorldMin,
+		Max:OccupancyMapSize.WorldMax,
+		};
+		const Octree = new OctreeNode( null, BoundingBox );
+		return Octree;
+	}
+
+	async LoadVoxelBuffer(Filename)
+	{
+		const VoxContents = await Pop.FileSystem.LoadFileAsArrayBufferAsync(Filename);
+		
+		const MergedGeometry = {};
+		function OnGeometry(Geometry)
+		{
+			for ( let Attrib in Geometry )
+			{
+				let Data = MergedGeometry[Attrib] || [];
+				Data = Data.concat( Geometry[Attrib] );
+				MergedGeometry[Attrib] = Data;
+			}
+		}
+		await ParseMagicaVox( VoxContents, OnGeometry );
+		const Geometry = MergedGeometry;
+		
+		const SkipEveryX = 0;
+		
+		function TweakPosition(xyz,Index)
+		{
+			if ( SkipEveryX!=0 && Index % SkipEveryX == 0 )
+				return null;
+			let Scale = 2;
+			Scale = [CubeSize*Scale,CubeSize*Scale,CubeSize*Scale];
+			
+			xyz = Multiply3( xyz, Scale );
+			xyz = Add3( xyz, VoxelCenterPosition );
+			return xyz;
+		}
+		
+		function TweakColour(rgba,Index)
+		{
+			if ( SkipEveryX!=0 && Index % SkipEveryX == 0 )
+				return null;
+			let ToneChange = (Math.random()-0.5)*0.05;
+			rgba[0] += ToneChange;
+			rgba[1] += ToneChange;
+			rgba[2] += ToneChange;
+			return rgba;
+		}
+		Geometry.Colours = Geometry.Colours.map(TweakColour).filter( x=>x != null );
+		Geometry.Positions = Geometry.Positions.map(TweakPosition).filter( x=>x != null );
+		
+		Geometry.Colours = new Float32Array(Geometry.Colours.flat(2));
+		
+		const VoxelBuffer = new VoxelBuffer_t();
+		VoxelBuffer.LoadPositions( Geometry.Positions, Geometry.Colours, VoxelCenterPosition, 0.0 );
+		return VoxelBuffer;
 	}
 }
