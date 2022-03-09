@@ -1,6 +1,6 @@
 import Pop from './PopEngine/PopEngine.js'
 import FrameCounter_t from './PopEngine/FrameCounter.js'
-import App_t from './RushGame.js'
+import App_t from './App.js'
 import {WaitForFrame} from './PopEngine/PopWebApi.js'
 
 
