@@ -14,6 +14,7 @@ import DirtyBuffer from './PopEngine/DirtyBuffer.js'
 import VoxelBuffer_t from './VoxelBuffer.js'
 import {CreateColourTexture} from './PopEngine/Images.js'
 import OctreeNode from './PopEngine/Octree.js'
+import PositionsToOctree from './PositionsToOctree.js'
 
 const NullTexture = CreateColourTexture([0,0,0,0]);
 
@@ -46,9 +47,10 @@ const OccupancyMapSize =
 function GetAllBoundingBoxes(Octree)
 {
 	let Boxes = [];
-	function OnNode(Box)
+	function OnNode(Box,LeafType)
 	{
-		Boxes.push(Box);
+		if ( LeafType != 'Empty' )
+			Boxes.push(Box);
 	}
 	Octree.EnumBoundingBoxes(OnNode);
 	
@@ -760,12 +762,17 @@ export default class App_t
 
 	async GenerateOctreeFromPositions(PositionsImage,PositionToWorldTransform)
 	{
+		/*
 		const BoundingBox =
 		{
 		Min:OccupancyMapSize.WorldMin,
 		Max:OccupancyMapSize.WorldMax,
 		};
 		const Octree = new OctreeNode( null, BoundingBox );
+		*/
+		const RenderContext = await this.WaitForRenderContext();
+		const Octree = await PositionsToOctree(PositionsImage,PositionToWorldTransform,RenderContext);
+		
 		return Octree;
 	}
 

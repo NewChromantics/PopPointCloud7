@@ -21,7 +21,7 @@ in vec3 FragWorldNormal;
 in vec3 FragCameraPosition;
 
 
-const float BorderWidth = 0.08;
+const float BorderWidth = 0.02;
 
 float Range(float Min,float Max,float Value)
 {
