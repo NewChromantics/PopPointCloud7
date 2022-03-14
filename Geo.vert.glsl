@@ -65,8 +65,11 @@ vec2 GetPhysicsUv()
 	float y = floor( Index / PhysicsPositionsTextureSize.x );
 	return vec2(x,y) / PhysicsPositionsTextureSize;
 }
-uniform mat4 ViewToCameraTransform;
+
+//	uv -> camera space
+uniform mat4 DepthViewToCameraTransform;
 uniform mat4 LocalToWorldTransform;
+
 mat4 GetLocalToWorldTransform()
 {
 	//	texelfetch seems a tiny bit faster

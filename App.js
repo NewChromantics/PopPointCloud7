@@ -22,7 +22,7 @@ const NullTexture = CreateColourTexture([0,0,0,0]);
 
 //	adreno (quest2) has a hardware optimised clear for 0,0,0 and 1,1,1
 //	somehow this should be passed from XR api/camera (default clear?)
-const ClearColour = ([40, 105, 133,255]).map( x => x/255 );
+const ClearColour = ([144, 91, 235,255]).map( x => x/255 );
 
 
 const FloorColour = [146, 166, 48,255].map(x=>(x/255));
@@ -67,6 +67,23 @@ async function CreateCubeTriangleBuffer(RenderContext)
 }
 
 
+function CreateBlitGeometry()
+{
+	let l = 0;
+	let t = 0;
+	let r = 1;
+	let b = 1;
+	const VertexData = [	l,t,	r,t,	r,b,	r,b, l,b, l,t	];
+	
+	const TexCoord = {};
+	TexCoord.Size = 2;
+	TexCoord.Data = VertexData;
+
+	const Geometry = {};
+	Geometry.TexCoord = TexCoord;
+	return Geometry;
+}
+
 async function CreateDebugQuadTriangleBuffer(RenderContext)
 {
 	const Geometry = CreateBlitGeometry();
@@ -103,10 +120,11 @@ let CubeShader = null;
 let CubeMultiViewShader = null;
 let CubePhysicsShader;
 let CubePhysicsMultiViewShader;
+let ProjectedGeoShader;
 
 let AppCamera = new Camera_t();
-AppCamera.Position = [0,0.5,-10];
-AppCamera.LookAt = [0,0.5,0];
+AppCamera.Position = [0,0.9,-4];
+AppCamera.LookAt = [0,0.9,0];
 AppCamera.FovVertical = 90;
 
 
@@ -282,6 +300,7 @@ export default class App_t
 		AssetManager.RegisterAssetAsyncFetchFunction('Cube', CreateCubeTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('UnitCube', CreateUnitCubeTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('DebugQuad', CreateDebugQuadTriangleBuffer );
+		AssetManager.RegisterAssetAsyncFetchFunction('UnitQuad', CreateDebugQuadTriangleBuffer );
 
 		const MultiViewMacros = {};
 		MultiViewMacros.MULTI_VIEW = true;
@@ -291,6 +310,12 @@ export default class App_t
 
 		const TexturePositionAndMultiView = Object.assign( {}, MultiViewMacros, TexturePositionMacros );
 
+		
+		{
+			const VertFilename = 'ProjectedGeo.vert.glsl';
+			const FragFilename = 'PlainTexture.frag.glsl';
+			ProjectedGeoShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename);
+		}
 		{
 			const VertFilename = 'Geo.vert.glsl';
 			const FragFilename = 'Colour.frag.glsl';
@@ -428,7 +453,7 @@ export default class App_t
 
 		for ( let DepthCloud of this.DepthClouds )
 		{
-			DepthCloud.GetRenderCommands( PushCommand, RenderContext, CameraUniforms, AssetManager, BoundingBoxShader,PlainColourShader );
+			DepthCloud.GetRenderCommands( PushCommand, RenderContext, CameraUniforms, AssetManager, BoundingBoxShader,PlainColourShader, ProjectedGeoShader );
 		}
 		
 		if ( RenderOctree )
