@@ -24,6 +24,7 @@ out vec2 FragViewUv;
 out vec3 ClipPosition;
 //out vec4 FragColour;
 out vec2 FragColourUv;
+out vec2 FragDepthUv;
 out vec3 FragLocalNormal;
 out vec3 FragWorldNormal;
 
@@ -38,20 +39,29 @@ uniform mat4 CameraProjectionTransform;
 uniform mat4 DepthViewToWorldTransform;
 uniform mat4 LocalToWorldTransform;
 uniform sampler2D DepthImage;
+uniform vec4 DepthImageCrop;	//	this crop = rect of original
 uniform vec4 DepthImageRect;	//	cropping rect
 uniform vec2 VoxelUv;
 
-vec2 GetColourUv()
+vec2 GetColourUv(vec2 Uv)
 {
-	return LocalUv.xy;
-	vec2 uv = vec2( LocalUv.x, 1.0-LocalUv.y );
-	
 	vec2 Min = DepthImageRect.xy;
 	vec2 Max = DepthImageRect.xy + DepthImageRect.zw;
 	
+	Max.y = mix( Min.y, Max.y, 0.5 );
 	
-	vec2 DepthUv = mix( Min, Max, uv );
+	vec2 DepthUv = mix( Min, Max, Uv );
+	return DepthUv;
+}
+
+vec2 GetDepthUv(vec2 Uv)
+{
+	vec2 Min = DepthImageRect.xy;
+	vec2 Max = DepthImageRect.xy + DepthImageRect.zw;
 	
+	Min.y = mix( Min.y, Max.y, 0.5 );
+	
+	vec2 DepthUv = mix( Min, Max, Uv );
 	return DepthUv;
 }
 
@@ -65,9 +75,7 @@ mat4 GetLocalToWorldTransform()
 {
 	return DepthViewToWorldTransform;
 	
-	vec2 Min = DepthImageRect.xy;
-	vec2 Max = DepthImageRect.xy + DepthImageRect.zw;
-	vec2 DepthUv = mix( Min, Max, VoxelUv );
+	vec2 DepthUv = GetDepthUv( VoxelUv );
 	vec4 DepthRainbow = texture( DepthImage, DepthUv );
 	float CameraDepth = RainbowToCameraDepth(DepthRainbow.xyz);
 	
@@ -93,7 +101,8 @@ vec3 GetWorldPos(mat4 LocalToWorldTransform)
 {
 	vec3 LocalPos = LocalPosition;
 	//LocalPos *= 0.011;
-	LocalPos = mix( vec3(0), vec3(1), LocalPos );
+	//LocalPos = mix( vec3(0), vec3(1), LocalPos );
+	LocalPos.xy = mix( DepthImageCrop.xy, DepthImageCrop.xy+DepthImageCrop.zw, LocalPos.xy );
 	LocalPos.z = 1.0;
 	
 	vec4 WorldPos = LocalToWorldTransform * vec4(LocalPos,1.0);
@@ -138,7 +147,8 @@ void main()
 	//FragColour = Colour;//LocalPosition;
 	FragLocalPosition = LocalPosition;
 	FragLocalUv = LocalUv.xy;
-	FragColourUv = GetColourUv();
+	FragColourUv = GetColourUv(LocalUv.xy);
+	FragDepthUv = GetDepthUv(LocalUv.xy);
 	FragLocalNormal = LocalNormal;
 	FragWorldNormal = WorldNormal.xyz;
 	

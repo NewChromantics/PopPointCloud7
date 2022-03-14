@@ -125,11 +125,14 @@ export class DepthCloud_t
 			Uniforms.LocalToWorldTransform = CreateTranslationScaleMatrix([0,0,0],[1,1,1]);
 			Uniforms.DepthImage = this.DepthImage;
 			Uniforms.DepthImageRect = this.DepthImageRect;
+			Uniforms.DepthImageCrop = this.DepthImageCrop;
 			Uniforms.VoxelUv = [0,0];
 			Uniforms.ColourImage = this.DepthImage;
 
+			const State = {};
+			State.BlendMode = 'Alpha';
 			
-			const DrawCube = ['Draw',Geo,Shader,Uniforms];
+			const DrawCube = ['Draw',Geo,Shader,Uniforms,State];
 			PushCommand( DrawCube );
 		}
 	}
@@ -173,7 +176,7 @@ export async function LoadDepthkitDepthClouds(Meta,AtlasImage)
 		SetMatrixTranslation(DepthCamera.Rotation4x4,0,0,0);
 		DepthCamera.NearDistance = Perspective.nearClip;
 
-		DepthCamera.FarDistance = 0.2*Perspective.farClip;
+		DepthCamera.FarDistance = 0.3*Perspective.farClip;
 		DepthCamera.ZForwardIsNegative = true;
 		DepthCamera.FovVertical = 110;
 		//DepthCamera.FocalCenterOffset = [Perspective.depthPrincipalPoint.x,Perspective.depthPrincipalPoint.y];
@@ -206,21 +209,21 @@ export async function LoadDepthkitDepthClouds(Meta,AtlasImage)
 		//	this is a weird set of values
 		//	x = 0 0.1
 		const CropRect = [Crop.x,Crop.y,Crop.z,Crop.w];
-		const CellsWidth = 2;
-		const CellsHeight = 3;
+		const CellsWidth = 3;
+		const CellsHeight = 2;
 		const DepthImageRect =
 		[
 			(PerspectiveIndex%CellsWidth) / CellsWidth,
-			(PerspectiveIndex/CellsWidth) / CellsHeight,
+			Math.floor(PerspectiveIndex/CellsWidth) / CellsHeight,
 			1/CellsWidth,
 			1/CellsHeight,
 		];
-		DepthImageRect[1] = 1 - DepthImageRect[1];
 	
 		
 		const Cloud = new DepthCloud_t();
 		Cloud.DepthImageRect = DepthImageRect;
 		Cloud.DepthImage = AtlasImage;
+		Cloud.DepthImageCrop = CropRect;
 		Cloud.BoundingBox = BoundingBox;
 		Cloud.DepthCamera = DepthCamera;
 		Clouds.push(Cloud);
