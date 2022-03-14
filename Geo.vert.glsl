@@ -36,7 +36,6 @@ uniform vec2 OccupancyMapTextureSize;
 uniform vec3 OccupancyMapWorldMin;
 uniform vec3 OccupancyMapWorldMax;
 
-in mat4 LocalToWorldTransform;
 #if !defined(WorldToCameraTransform)
 uniform mat4 WorldToCameraTransform;
 uniform mat4 CameraProjectionTransform;
@@ -45,6 +44,7 @@ in vec4 Colour;
 
 uniform float VelocityStretch;
 
+uniform float TimeSecs;
 
 #if defined(POSITION_FROM_TEXTURE)
 //	gr: we have a problem here... the previous position is often very close
@@ -65,19 +65,47 @@ vec2 GetPhysicsUv()
 	float y = floor( Index / PhysicsPositionsTextureSize.x );
 	return vec2(x,y) / PhysicsPositionsTextureSize;
 }
-
+uniform mat4 ViewToCameraTransform;
+uniform mat4 LocalToWorldTransform;
 mat4 GetLocalToWorldTransform()
 {
 	//	texelfetch seems a tiny bit faster
 	//vec4 Position4 = texture( PhysicsPositionsTexture, PhysicsPositionUv.xy );
 	vec4 Position4 = texelFetch( PhysicsPositionsTexture, ivec2(PhysicsPositionUv.xy*PhysicsPositionsTextureSize), 0 );
-	vec3 WorldPosition = Position4.xyz;
-	//vec3 WorldPosition = vec3(PhysicsPositionUv,0);
+	//Position4.z = mod(TimeSecs,10.0)/10.0;
+	//Position4.z *= 1.0;
+	//Position4.z = mix(0.0,1.0,Position4.z);
 	
-	mat4 Transform = mat4( 1,0,0,0,	
+	mat4 NoTransform = mat4( 1,0,0,0,
+							0,1,0,0,
+							0,0,1,0,
+							Position4.xyz,1 );
+	//return NoTransform;
+	
+	//	specific to nerf data
+	vec3 ViewSpacePosition = Position4.xyz;
+	//	need to project this against a[n inverse] projection matrix
+	/*mat4 ViewToCamera = mat4(	-1,0,0,0,
+								0,0,1,0,
+								0,1,0,0,
+								0,0,0,1 );
+	*/
+	mat4 ViewToCamera = mat4(	1,0,0,0,
+								0,1,0,0,
+								0,0,-1,0,
+								0,0,0,1 );
+	ViewToCamera = ViewToCameraTransform;
+	
+	mat4 CameraToWorld = LocalToWorldTransform;
+	
+	vec4 CameraPosition = ViewToCamera * vec4(ViewSpacePosition,1);
+	vec4 WorldPosition = CameraToWorld * CameraPosition;
+	//vec4 WorldPosition = CameraPosition;
+
+	mat4 Transform = mat4( 1,0,0,0,
 							0,1,0,0,	
 							0,0,1,0,	
-							WorldPosition,1 );
+							WorldPosition );
 	return Transform;
 }
 
@@ -86,6 +114,7 @@ mat4 GetLocalToWorldTransform()
 #define USE_PREVIOUS_POSITIONS_TEXTURE 0
 
 in vec3 WorldVelocity;
+in mat4 LocalToWorldTransform;
 
 mat4 GetLocalToWorldTransform()
 {
@@ -97,9 +126,18 @@ mat4 GetLocalToWorldTransform()
 
 vec3 GetWorldPos(mat4 LocalToWorldTransform)
 {
-	vec4 WorldPos = LocalToWorldTransform * vec4(LocalPosition,1.0);
+	vec3 LocalPos = LocalPosition;
+	
+	LocalPos*=0.10;
+	
+	//if ( LocalPos.z < 0.0 )		LocalPos.z *= 10.0;
+	
+	vec4 WorldPos = LocalToWorldTransform * vec4(LocalPos,1.0);
 	WorldPos.xyz *= WorldPos.www;
 	WorldPos.w = 1.0;
+	
+	
+	
 	return WorldPos.xyz;
 }
 

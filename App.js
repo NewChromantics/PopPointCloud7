@@ -1,48 +1,44 @@
 import Camera_t from './PopEngine/Camera.js'
 import AssetManager from './PopEngine/AssetManager.js'
 import {CreateCubeGeometry,MergeGeometry} from './PopEngine/CommonGeometry.js'
-import {CreateTranslationMatrix,Add3,Multiply3,Dot3,lerp,Lerp,LengthSq3,Normalise3,Subtract3} from './PopEngine/Math.js'
+import {TransformPosition,GetMatrixTransposed,MatrixInverse4x4,CreateTranslationMatrix,Add3,Multiply3,Dot3,lerp,Lerp,LengthSq3,Normalise3,Subtract3} from './PopEngine/Math.js'
 import {CreateRandomImage} from './PopEngine/Images.js'
 import {GetRandomColour} from './PopEngine/Colour.js'
 import * as PopMath from './PopEngine/Math.js'
 import Pop from './PopEngine/PopEngine.js'
 import GetBlitPixelTestRenderCommands from './BlitPixelsTest.js'
 import ParseMagicaVox from './PopEngine/MagicaVox.js'
-import {JoinTypedArrays} from './PopEngine/PopApi.js'
+import {JoinTypedArrays,SplitArrayIntoChunks} from './PopEngine/PopApi.js'
 import {GetZeroFloatArray} from './PopEngine/PopApi.js'
 import DirtyBuffer from './PopEngine/DirtyBuffer.js'
 import VoxelBuffer_t from './VoxelBuffer.js'
 import {CreateColourTexture} from './PopEngine/Images.js'
 import OctreeNode from './PopEngine/Octree.js'
 import PositionsToOctree from './PositionsToOctree.js'
+import {LoadDepthkitDepthClouds} from './DepthCloud.js'
+
 
 const NullTexture = CreateColourTexture([0,0,0,0]);
 
 //	adreno (quest2) has a hardware optimised clear for 0,0,0 and 1,1,1
 //	somehow this should be passed from XR api/camera (default clear?)
-const ClearColour = ([86, 201, 209,255]).map( x => x/255 );
+const ClearColour = ([40, 105, 133,255]).map( x => x/255 );
 
 
-const FloorColour = [24, 64, 196,255].map(x=>(x/255));
-//const FloorColour = [0.1,0.3,0.4,1.0];
+const FloorColour = [146, 166, 48,255].map(x=>(x/255));
+const OriginColour = [255,60,60,255].map(x=>(x/255));
 const RenderFloor = true;
-const FloorSize = 300;//800
+const RenderOrigin = true;
+const FloorSize = [1,0.001,1];
+const OriginSize = [0.01,0.01,0.01];
+const FloorOrigin = [0,0,0];
 
 const RenderDebugQuads = true;	//	need to avoid in xr
 const DebugQuadTilesx = 10;
 const DebugQuadTilesy = 10;
 
-const RenderOctree = false;
-const ReadBackOccupancyTexture = RenderOctree;
-const GenerateOccupancyTexture = true;
+const RenderOctree = true;
 
-const OccupancyTextureWidth = 128;
-const OccupancyTextureHeight = 128;
-const OccupancyMapSize = 
-{
-	WorldMin:[-7,-0.06,0],
-	WorldMax:[4,1.80,-6],
-};
 
 function GetAllBoundingBoxes(Octree)
 {
@@ -64,46 +60,12 @@ function GetAllBoundingBoxes(Octree)
 
 async function CreateCubeTriangleBuffer(RenderContext)
 {
-	const Geometry = CreateCubeGeometry(-CubeSize,CubeSize);
+	const Geometry = CreateCubeGeometry(-1,1);
 	const TriangleIndexes = undefined;
 	const TriBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
 	return TriBuffer;
 }
 
-
-async function CreateUnitCubeTriangleBuffer(RenderContext)
-{
-	const Geometry = CreateCubeGeometry(0,1);
-	const TriangleIndexes = undefined;
-	const TriBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
-	return TriBuffer;
-}
-
-
-function CreateBlitGeometry()
-{
-	let l = 0;
-	let t = 0;
-	let r = 1;
-	let b = 1;
-	const VertexData = [	l,t,	r,t,	r,b,	r,b, l,b, l,t	];
-	
-	const TexCoord = {};
-	TexCoord.Size = 2;
-	TexCoord.Data = VertexData;
-
-	const Geometry = {};
-	Geometry.TexCoord = TexCoord;
-	return Geometry;
-}
-
-async function CreateBlitTriangleBuffer(RenderContext)
-{
-	const Geometry = CreateBlitGeometry();
-	const TriangleIndexes = undefined;
-	const TriangleBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
-	return TriangleBuffer;
-}
 
 async function CreateDebugQuadTriangleBuffer(RenderContext)
 {
@@ -112,230 +74,12 @@ async function CreateDebugQuadTriangleBuffer(RenderContext)
 	const TriangleBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
 	return TriangleBuffer;
 }
-
-
-let DebugQuadShader;
-let BlitCopyShader;
-let BlitUpdatePositionsShader;
-let BlitUpdateVelocitysShader;
-let BlitUpdateVelocitysAndPositionsShader;
-
-function GetRenderCommandsUpdatePhysicsTextures(RenderContext,VoxelBuffer,Projectiles,OccupancyTexture)
+async function CreateUnitCubeTriangleBuffer(RenderContext)
 {
-	if ( !VoxelBuffer.PositionTexture )
-		return [];
-	const PositionTexture = VoxelBuffer.PositionsTexture;
-	const PreviousPositionsTexture = VoxelBuffer.PreviousPositionsTexture;
-	const VelocitysTexture = VoxelBuffer.VelocitysTexture;
-	const PreviousVelocitysTexture = VoxelBuffer.PreviousVelocitysTexture;
-	const ShapePositionsTexture = VoxelBuffer.ShapePositionsTexture;
-	
-	const Commands = [];
-	
-	const BlitGeo = AssetManager.GetAsset('BlitQuad',RenderContext);
-	const State = {};
-	State.BlendMode = 'Blit';
-	
-	let TexelSize = [1.0 / PositionTexture.GetWidth(),1.0 / PositionTexture.GetHeight()];
-	
-	//	copy old velocities
-	{
-		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
-		const Uniforms = {};
-		Uniforms.SourceTexture = VelocitysTexture;
-		Commands.push(['SetRenderTarget',PreviousVelocitysTexture]);
-		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
-	}
-
-	//	copy old positions
-	{
-		const CopyShader = AssetManager.GetAsset(BlitCopyShader,RenderContext);
-		const Uniforms = {};
-		Uniforms.SourceTexture = PositionTexture;
-		Commands.push(['SetRenderTarget',PreviousPositionsTexture]);
-		Commands.push(['Draw',BlitGeo,CopyShader,Uniforms,State]);
-	}
-	
-	//	quest doesn't support MRT
-	const UseMrt = false;
-	
-	
-	//	update velocitys texture
-	{
-		//	get projectile data
-		//	todo: sort to significant projectiles within bounds
-		function CompareProjectiles(a,b)
-		{
-			//	temp use nearest to 0,0,0 (use spawn time?)
-			let Distancea = PopMath.Length3(a.Position);
-			let Distanceb = PopMath.Length3(b.Position);
-			if ( Distancea < Distanceb )	return -1;
-			if ( Distancea > Distanceb )	return 1;
-			return 0;
-		}
-		const UsefulProjectiles = Projectiles.slice().sort(CompareProjectiles);
-		
-		function GetProjectilePos(xxx,Index)
-		{
-			if ( Index >= UsefulProjectiles.length )
-				return [0,0,0,0];
-			const Projectile = UsefulProjectiles[Index];
-			return [...Projectile.Position,1];
-		}
-		function GetProjectilePrevPos(xxx,Index)
-		{
-			if ( Index >= UsefulProjectiles.length )
-				return [0,0,0,0];
-			const Projectile = UsefulProjectiles[Index];
-			return [...Projectile.PrevPosition,1];
-		}
-		const MAX_PROJECTILES = 100;
-		let ProjectilePrevPos = new Array(MAX_PROJECTILES).fill(0).map( GetProjectilePrevPos );
-		let ProjectileNextPos = new Array(MAX_PROJECTILES).fill(0).map( GetProjectilePos );
-	
-		const UpdateVelocitysShader = AssetManager.GetAsset(BlitUpdateVelocitysShader,RenderContext);
-		const UpdateVelocitysAndPositionsShader = AssetManager.GetAsset(BlitUpdateVelocitysAndPositionsShader,RenderContext);
-		const Uniforms = {};
-		Uniforms.ShapePositionsTexture = ShapePositionsTexture;
-		Uniforms.PreviousPositionsTexture = PreviousPositionsTexture;
-		Uniforms.PreviousVelocitysTexture = PreviousVelocitysTexture;
-		Uniforms.PositionsTexture = PositionTexture;
-		Uniforms.ProjectilePrevPos = ProjectilePrevPos;
-		Uniforms.ProjectileNextPos = ProjectileNextPos;
-		Uniforms.TexelSize = TexelSize;
-		Uniforms.CubeSize = CubeSize;
-		Uniforms.Random4 = [Math.random(),Math.random(),Math.random(),Math.random()];
-		
-		Uniforms.OccupancyMapWorldMin = OccupancyMapSize.WorldMin;
-		Uniforms.OccupancyMapWorldMax = OccupancyMapSize.WorldMax;
-		Uniforms.OccupancyMapTexture = OccupancyTexture;
-		Uniforms.OccupancyMapTextureSize = [OccupancyTexture.GetWidth(),OccupancyTexture.GetHeight()];
-
-		if ( UseMrt )
-		{
-			Commands.push(['SetRenderTarget',[VelocitysTexture,PositionTexture]]);
-			Commands.push(['Draw',BlitGeo,UpdateVelocitysAndPositionsShader,Uniforms,State]);
-		}
-		else
-		{
-			Commands.push(['SetRenderTarget',VelocitysTexture]);
-			Commands.push(['Draw',BlitGeo,UpdateVelocitysShader,Uniforms,State]);
-		}
-	}
-
-	//	update positions texture
-	if ( !UseMrt )
-	{
-		const UpdatePositionsShader = AssetManager.GetAsset(BlitUpdatePositionsShader,RenderContext);
-		const Uniforms = {};
-		Uniforms.OldPositionsTexture = PreviousPositionsTexture;
-		Uniforms.VelocitysTexture = VelocitysTexture;
-		Uniforms.TexelSize = TexelSize;
-		Commands.push(['SetRenderTarget',PositionTexture]);
-		Commands.push(['Draw',BlitGeo,UpdatePositionsShader,Uniforms,State]);
-	}
-	
-	return Commands;
-}
-
-
-function GetBoundingBoxesFromOccupancy(OccupancyTexture)
-{
-	if ( !OccupancyTexture )
-		return [];
-	
-	let BoundingBoxes = [];
-
-	const w = OccupancyTexture.GetWidth();
-	const h = OccupancyTexture.GetHeight();
-	const Channels = OccupancyTexture.GetChannels();
-	if ( Channels != 4 )
-		throw `Expecting 4 channels in occupancy texture, not ${Channels}`;
-	const Pixels = OccupancyTexture.GetPixelBuffer();
-
-	let MapWorldSize = [
-		OccupancyMapSize.WorldMax[0] - OccupancyMapSize.WorldMin[0],
-		OccupancyMapSize.WorldMax[1] - OccupancyMapSize.WorldMin[1],
-		OccupancyMapSize.WorldMax[2] - OccupancyMapSize.WorldMin[2],
-	];
-	const YSectionsPerComponent = 7;
-	const YSectionComponents = 4;
-	const YSectionCount = (YSectionsPerComponent*YSectionComponents);
-
-	let MapPixelStep = [1/w,1/YSectionCount,1/h];
-	MapPixelStep[0] *= MapWorldSize[0];
-	MapPixelStep[1] *= MapWorldSize[1];
-	MapPixelStep[2] *= MapWorldSize[2];
-	
-	function GetBoundingBox(px,py,YBit)
-	{
-		let u = px / w;
-		let v = py / h;
-		let yf = YBit / YSectionCount;
-		let x = Lerp( OccupancyMapSize.WorldMin[0], OccupancyMapSize.WorldMax[0], u ); 
-		let y = Lerp( OccupancyMapSize.WorldMin[1], OccupancyMapSize.WorldMax[1], yf ); 
-		let z = Lerp( OccupancyMapSize.WorldMin[2], OccupancyMapSize.WorldMax[2], v );
-		const Box = {};
-		Box.Min = [x,y,z];
-		Box.Size = MapPixelStep;
-		//Box.Size = MapPixelStep.slice();
-		//Box.Size[1] = 0.10;
-		return Box;
-	}
-	
-	//	precalc this pow as it's expensive
-	const SectionValues = new Array(YSectionsPerComponent).fill(0).map( (nul,cs) => Math.pow(10,cs) );
-		
-	function DecodeRgbaToBoundingBoxes(px,py,rgba)
-	{
-		const Boxs = [];
-		
-		for ( let SectionComponent=0;	SectionComponent<YSectionComponents;	SectionComponent++ )
-		{
-			for ( let CompSection=0;	CompSection<YSectionsPerComponent;	CompSection++ )
-			{
-				//	old bitfield
-				//const Set = YBitfield & (1<<b);
-				//	new section'd x10
-				//	b=0 is 1+1+1+1 etc
-				//	b=1 is 10+10+10
-				const YBitfield = rgba[SectionComponent];
-				//let SectionValue = Math.pow(10,CompSection);
-				const SectionValue = SectionValues[CompSection];
-				let HitsInSection = Math.floor( YBitfield / SectionValue ) % 10;
-				const Set = (HitsInSection>0);
-				const SectionIndex = (SectionComponent*YSectionsPerComponent) + CompSection;
-				const b = SectionIndex;
-				
-				if ( !Set )
-					continue;
-				
-				const Box = GetBoundingBox(px,py,b);
-				Boxs.push(Box);
-			}
-		}
-		return Boxs;
-	}
-		
-	
-	for ( let i=0;	i<Pixels.length;	i+=Channels)
-	{
-		//const Rgba = Pixels.slice( i, i+Channels );
-		const r = Pixels[i+0];
-		const g = Pixels[i+1];
-		const b = Pixels[i+2];
-		const a = Pixels[i+3];
-		const Rgba = [r,g,b,a];
-		const pi = i / Channels;
-		const x = pi % w;
-		const y = Math.floor( pi / w );
-		const Boxs = DecodeRgbaToBoundingBoxes( x, y, Rgba );
-		BoundingBoxes.push(...Boxs);
-	}
-
-	BoundingBoxes = BoundingBoxes.filter( b => b!=null );
-
-	return BoundingBoxes;
+	const Geometry = CreateCubeGeometry(0,1);
+	const TriangleIndexes = undefined;
+	const TriBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
+	return TriBuffer;
 }
 
 
@@ -352,20 +96,18 @@ function GetColourN(xyz,Index)
 	return [...rgb,a];
 }
 
+let DebugQuadShader;
 let BoundingBoxShader = null;
+let PlainColourShader = null;
 let CubeShader = null;
 let CubeMultiViewShader = null;
-let CubePhysicsShader = null;
-let CubePhysicsMultiViewShader = null;
-let AppCamera = new Camera_t();
-//	try and emulate default XR pose a bit
-AppCamera.Position = [0,1.5,0];
-AppCamera.LookAt = [0,1.5,-1];
-AppCamera.FovVertical = 90;
-let DefaultDepthTexture = CreateRandomImage(16,16);
-let VoxelCenterPosition = [0,0,AppCamera.LookAt[2]];//AppCamera.LookAt.slice();
-let CubeSize = 0.02;
+let CubePhysicsShader;
+let CubePhysicsMultiViewShader;
 
+let AppCamera = new Camera_t();
+AppCamera.Position = [0,0.5,-10];
+AppCamera.LookAt = [0,0.5,0];
+AppCamera.FovVertical = 90;
 
 
 
@@ -435,7 +177,9 @@ function RenderCubes(PushCommand,RenderContext,CameraUniforms,CubeTransforms,Cub
 	Uniforms.OccupancyMapWorldMax = OccupancyMapSize.WorldMax;
 	Uniforms.OccupancyMapTexture = OccupancyTexture;
 	Uniforms.OccupancyMapTextureSize = [OccupancyTexture.GetWidth(),OccupancyTexture.GetHeight()];
-
+	
+	Uniforms.TimeSecs = Pop.GetTimeNowMs()/1000;
+	
 	const State = {};
 	State.BlendMode = 'Blit';
 	//State.CullFacing = 'Back';
@@ -455,7 +199,7 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 	const Shader = AssetManager.GetAsset(CameraUniforms.MultiView ? CubePhysicsMultiViewShader : CubePhysicsShader,RenderContext);
 
 	const Uniforms = Object.assign({},CameraUniforms);
-	//Uniforms.LocalToWorldTransform = CubeTransforms;
+	Uniforms.LocalToWorldTransform = VoxelsBuffer.LocalToWorldTransform;
 	Uniforms.Colour = VoxelsBuffer.Colours;
 
 	let PositionsTexture = VoxelsBuffer.PositionsTexture;
@@ -473,7 +217,9 @@ function RenderVoxelBufferCubes(PushCommand,RenderContext,CameraUniforms,VoxelsB
 	Uniforms.OccupancyMapTexture = OccupancyTexture;
 	Uniforms.OccupancyMapTextureSize = [OccupancyTexture.GetWidth(),OccupancyTexture.GetHeight()];
 	
-	
+	Uniforms.TimeSecs = Pop.GetTimeNowMs()/1000;
+	Uniforms.ViewToCameraTransform = VoxelsBuffer.Camera.GetScreenToCameraTransform([0,0,1,1]);
+
 	const State = {};
 	State.BlendMode = 'Blit';
 	//State.CullFacing = 'Back';
@@ -511,7 +257,8 @@ export default class App_t
 		this.RegisterAssets();
 		this.UserExitPromise = Pop.CreatePromise();
 		
-		this.VoxelBuffer = null;
+		this.VoxelBuffers = [];
+		this.DepthClouds = [];
 		this.Octree = null;
 		this.WaitForRenderContextPromise = Pop.CreatePromise();
 	}
@@ -534,7 +281,6 @@ export default class App_t
 			return;
 		AssetManager.RegisterAssetAsyncFetchFunction('Cube', CreateCubeTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('UnitCube', CreateUnitCubeTriangleBuffer );
-		AssetManager.RegisterAssetAsyncFetchFunction('BlitQuad', CreateBlitTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('DebugQuad', CreateDebugQuadTriangleBuffer );
 
 		const MultiViewMacros = {};
@@ -555,16 +301,15 @@ export default class App_t
 			CubePhysicsMultiViewShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertPhysicsFilename,TexturePositionAndMultiView);
 		}
 		{
-			const VertFilename = 'Geo.vert.glsl';
+			const VertFilename = 'PlainGeo.vert.glsl';
+			const FragFilename = 'PlainColour.frag.glsl';
+			PlainColourShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename);
+		}
+		
+		{
+			const VertFilename = 'PlainGeo.vert.glsl';
 			const FragFilename = 'BoundingBox.frag.glsl';
 			BoundingBoxShader = AssetManager.RegisterShaderAssetFilename(FragFilename,VertFilename);
-		}
-		{
-			const VertBlitQuadFilename = 'BlitQuad.vert.glsl';
-			BlitCopyShader = AssetManager.RegisterShaderAssetFilename('BlitCopy.frag.glsl',VertBlitQuadFilename);
-			BlitUpdatePositionsShader = AssetManager.RegisterShaderAssetFilename('BlitUpdatePositions.frag.glsl',VertBlitQuadFilename);
-			BlitUpdateVelocitysShader = AssetManager.RegisterShaderAssetFilename('BlitUpdateVelocitys.frag.glsl',VertBlitQuadFilename);
-			BlitUpdateVelocitysAndPositionsShader = AssetManager.RegisterShaderAssetFilename('BlitUpdateVelocitysAndPositions.frag.glsl',VertBlitQuadFilename);
 		}
 		DebugQuadShader = AssetManager.RegisterShaderAssetFilename('DebugQuad.frag.glsl','DebugQuad.vert.glsl');
 	}
@@ -655,8 +400,6 @@ export default class App_t
 		CameraUniforms.WorldToCameraTransform = Camera.GetWorldToCameraMatrix();
 		CameraUniforms.CameraToWorldTransform = Camera.GetLocalToWorldMatrix();
 		CameraUniforms.CameraProjectionTransform = Camera.GetProjectionMatrix(Viewport);
-		CameraUniforms.DepthTexture = Camera.DepthImage || DefaultDepthTexture;
-		CameraUniforms.NormalDepthToViewDepthTransform = CameraUniforms.DepthTexture.NormalDepthToViewDepthTransform || [];
 		
 		//	pass this data down to the GetDrawCommands() stuff
 		if ( Camera.MultiView )
@@ -678,9 +421,20 @@ export default class App_t
 			RenderCommands.push(Command);
 		}
 
-		if ( this.VoxelBuffer )
+		for ( let VoxelBuffer of this.VoxelBuffers )
 		{
-			RenderVoxelBufferCubes( PushCommand, RenderContext, CameraUniforms, this.VoxelBuffer, null );
+			RenderVoxelBufferCubes( PushCommand, RenderContext, CameraUniforms, VoxelBuffer, null );
+		}
+
+		for ( let DepthCloud of this.DepthClouds )
+		{
+			DepthCloud.GetRenderCommands( PushCommand, RenderContext, CameraUniforms, AssetManager, BoundingBoxShader,PlainColourShader );
+		}
+		
+		if ( RenderOctree )
+		{
+			const BoundingBoxes = this.DepthClouds.map( c => c.BoundingBox ).filter( bb => bb!=null );
+			RenderBoundingBoxes( PushCommand, RenderContext, CameraUniforms, BoundingBoxes );
 		}
 
 		
@@ -691,19 +445,32 @@ export default class App_t
 		//	floor cube
 		if ( RenderFloor )
 		{
-			let FloorCubeScale = 0.01;
-			let FloorCubeWidth = FloorSize;
-			let FloorCubeHeight = CubeSize * 1.0 * FloorCubeScale;
-			let FloorZ = -5;
-			let FloorX = -3;
-			FloorCubeHeight += CubeSize * 2.0;
-			let FloorTransform = PopMath.CreateTranslationScaleMatrix( [FloorX,-FloorCubeHeight,FloorZ], [FloorCubeWidth,FloorCubeScale,FloorCubeWidth] );
-			
-			let Transforms = [FloorTransform];
-			let Velocitys = [[0,0,0]];
-			let Colours = [FloorColour];
-			const OccupancyTexture = null;
-			RenderCubes( PushCommand, RenderContext, CameraUniforms, Transforms, Velocitys, OccupancyTexture, Colours );
+			let Transform = PopMath.CreateTranslationScaleMatrix( FloorOrigin, FloorSize );
+			const Geo = AssetManager.GetAsset('UnitCube',RenderContext);
+			const Shader = AssetManager.GetAsset( PlainColourShader, RenderContext );
+
+			const Uniforms = Object.assign({},CameraUniforms);
+			Uniforms.LocalToWorldTransform = Transform;
+			Uniforms.Colour = FloorColour;
+			const State = {};
+			State.BlendMode = 'Blit';
+			const DrawCube = ['Draw',Geo,Shader,Uniforms,State];
+			PushCommand( DrawCube );
+		}
+		if ( RenderOrigin )
+		{
+			let Position = Subtract3( FloorOrigin, Multiply3( OriginSize, 0.5 ) );
+			let Transform = PopMath.CreateTranslationScaleMatrix( Position, OriginSize );
+			const Geo = AssetManager.GetAsset('UnitCube',RenderContext);
+			const Shader = AssetManager.GetAsset( PlainColourShader, RenderContext );
+
+			const Uniforms = Object.assign({},CameraUniforms);
+			Uniforms.LocalToWorldTransform = Transform;
+			Uniforms.Colour = OriginColour;
+			const State = {};
+			State.BlendMode = 'Blit';
+			const DrawCube = ['Draw',Geo,Shader,Uniforms,State];
+			PushCommand( DrawCube );
 		}
 		
 		//	dont do this in xr
@@ -711,8 +478,10 @@ export default class App_t
 		{
 			const DebugTextures = [];
 			if ( this.VoxelBuffer )
+			{
 				DebugTextures.push( this.VoxelBuffer.PositionsTexture );
-			
+			}
+
 			function Render(DebugTexture,Index)
 			{
 				const DrawTransparent = false;
@@ -721,7 +490,7 @@ export default class App_t
 			DebugTextures.forEach( Render );
 		}
 
-		if ( this.Octree )
+		if ( this.Octree && RenderOctree )
 		{
 			//const BoundingBoxes = GetBoundingBoxesFromOccupancy(this.Game.OccupancyTexture);
 			const BoundingBoxes = GetAllBoundingBoxes(this.Octree);
@@ -742,14 +511,27 @@ export default class App_t
 	
 	async GameIteration()
 	{
-		await this.GenerateSdfThread(`Models/Taxi.vox`);
+		await this.LoadDepthCloudThread(`Models/Scientist/Scientist.jpg`,`Models/Scientist/TAKE_03_03_10_24_58_Export_03_14_08_40_09.txt`);
+		//await this.GenerateSdfThread(`Models/Taxi.vox`);
+		//await this.GenerateSdfThread(`Models/lego/test/r_0`);
+		//await this.GenerateSdfThread(`Models/lego/test/r_25`);
+		//await this.GenerateSdfThread(`Models/lego/test/r_146`);
+	}
+	
+	async LoadDepthCloudThread(ImageFilename,MetaFilename)
+	{
+		const Meta = await Pop.FileSystem.LoadFileAsJsonAsync(MetaFilename);
+		const Image = await Pop.FileSystem.LoadFileAsImageAsync(ImageFilename);
+		const DepthClouds = await LoadDepthkitDepthClouds(Meta,Image);
+		this.DepthClouds.push(...DepthClouds);
 	}
 	
 	//	this is a pipeline, this is the bit which we should abstract
 	async GenerateSdfThread(Filename)
 	{
-		this.VoxelBuffer = await this.LoadVoxelBuffer(Filename);
-		this.Octree = await this.GenerateOctreeFromVoxelBuffer(this.VoxelBuffer);
+		const VoxelBuffer = await this.LoadVoxelBuffer(Filename);
+		this.VoxelBuffers.push(VoxelBuffer);
+		this.Octree = await this.GenerateOctreeFromVoxelBuffer(VoxelBuffer);
 	}
 	
 	async GenerateOctreeFromVoxelBuffer(VoxelBuffer)
@@ -777,6 +559,114 @@ export default class App_t
 	}
 
 	async LoadVoxelBuffer(Filename)
+	{
+		const VoxelBuffer = new VoxelBuffer_t();
+		VoxelBuffer.LocalToWorldTransform = CreateTranslationMatrix(0,0,0);
+
+		if ( Filename.endsWith('.vox') )
+		{
+			await this.LoadVoxelBufferVox(Filename,VoxelBuffer);
+		}
+		else
+		{
+			await this.LoadVoxelBufferDepthAndColour(Filename,VoxelBuffer);
+		}
+		return VoxelBuffer;
+	}
+
+	async LoadVoxelBufferDepthAndColour(BaseFilename,VoxelBuffer)
+	{
+		//	assume its the dpeth+colour dataset
+		const ColourFilename = `${BaseFilename}.png`;
+		const DepthFilename = `${BaseFilename}_depth_0001.png`;
+		const MetaFilename = `Models/Lego/transforms_test.json`;
+		let AllMeta = await Pop.FileSystem.LoadFileAsStringAsync(MetaFilename);
+		AllMeta = JSON.parse(AllMeta);
+		AllMeta.frames.forEach( f => f.file_path = f.file_path.split('./').join('') );
+
+		//const Meta = AllMeta.frames.find( f => f.file_path == BaseFilename );
+		const Metas = AllMeta.frames.filter( f => BaseFilename.endsWith(f.file_path) );
+		if ( Metas.length != 1 )
+			throw `Meta not found`;
+		
+		//	freom readme
+		//	https://github.com/bmild/nerf
+		//	camera_angle_x: The FOV in x dimension
+		//	frames: List of dictionaries that contain the camera transform matrices for each image.
+		//	https://github.com/bmild/nerf/blob/20a91e764a28816ee2234fcadb73bd59a613a44c/load_blender.py
+		//	need to calc projection matrix!
+		//	 H, W = imgs[0].shape[:2]
+		//	camera_angle_x = float(meta['camera_angle_x'])
+		//	focal = .5 * W / np.tan(.5 * camera_angle_x)
+		//	render_poses = tf.stack([pose_spherical(angle, -30.0, 4.0) for angle in np.linspace(-180,180,40+1)[:-1]],0)
+		//def pose_spherical(theta, phi, radius):
+		//	c2w = trans_t(radius)
+		//	c2w = rot_phi(phi/180.*np.pi) @ c2w
+		//	c2w = rot_theta(theta/180.*np.pi) @ c2w
+		//	c2w = np.array([[-1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]]) @ c2w
+		//	return
+		//near = 2.
+		// far = 6.
+		//const NearZ = 2;
+		//const FarZ = 6;
+		//	referenced as c2w, camera to world
+		VoxelBuffer.LocalToWorldTransform = Metas[0].transform_matrix.flat(2);
+		VoxelBuffer.LocalToWorldTransform = GetMatrixTransposed(VoxelBuffer.LocalToWorldTransform);
+		//VoxelBuffer.LocalToWorldTransform = MatrixInverse4x4(VoxelBuffer.LocalToWorldTransform);
+
+		VoxelBuffer.Camera = new Camera_t();
+		//	this is horz! but 800x800
+		VoxelBuffer.Camera.FovVertical = PopMath.RadToDeg(AllMeta.camera_angle_x);
+		VoxelBuffer.Camera.NearDistance = 0.01;
+		VoxelBuffer.Camera.FarDistance = 10;
+
+		const ColourImage = await Pop.FileSystem.LoadFileAsImageAsync(ColourFilename);
+		let ColourPixels = Array.from(ColourImage.GetPixelBuffer());
+		ColourPixels = ColourPixels.map( x => x/255 );
+		let Colours = SplitArrayIntoChunks( ColourPixels, ColourImage.GetChannels() );
+		
+		const DepthImage = await Pop.FileSystem.LoadFileAsImageAsync(DepthFilename);
+		let Depths = DepthImage.GetPixelBuffer();
+		Depths = SplitArrayIntoChunks( Depths, DepthImage.GetChannels() );
+		
+		const Width = DepthImage.GetWidth();
+		const Height = DepthImage.GetHeight();
+		
+		function DepthRgbaToPosition(rgba,PixelIndex)
+		{
+			if ( rgba[3] == 0 )
+				return null;
+			let x = PixelIndex % Width;
+			let y = Math.floor( PixelIndex / Width );
+			x /= Width;
+			y /= Height;
+			let z = rgba[0]/255;
+			//	xyz is 0...1 convert to -1..1
+			x = Lerp( -1, 1, x );
+			y = Lerp( -1, 1, y );
+			z = Lerp( 2, 6, z );
+			//z = 0.25;
+			
+			
+			//y = 1-y;
+			//z *= 50;
+			//x *= CubeSize*2;
+			//y *= CubeSize*2;
+			return [x,y,z];
+		}
+		let Positions = Depths.map( DepthRgbaToPosition );
+		
+		//	remove invalid entries from both arrays
+		Colours = Colours.filter( (c,i) => Positions[i]!=null );
+		Positions = Positions.filter( (p,i) => Positions[i]!=null );
+		
+		//Colours = Colours.flat(2);
+		//Positions = Positions.flat(2);
+
+		VoxelBuffer.LoadPositions( Positions, Colours, [0,0,0] );
+	}
+	
+	async LoadVoxelBufferVox(Filename,VoxelBuffer)
 	{
 		const VoxContents = await Pop.FileSystem.LoadFileAsArrayBufferAsync(Filename);
 		
@@ -822,8 +712,6 @@ export default class App_t
 		
 		Geometry.Colours = new Float32Array(Geometry.Colours.flat(2));
 		
-		const VoxelBuffer = new VoxelBuffer_t();
 		VoxelBuffer.LoadPositions( Geometry.Positions, Geometry.Colours, VoxelCenterPosition, 0.0 );
-		return VoxelBuffer;
 	}
 }

@@ -31,6 +31,7 @@ function XyzsFromImage(Image)
 	if ( Pixels.Data )
 		Pixels = Pixels.Data;
 	const Xyzs = [];
+	//SplitArrayIntoChunks
 	for ( let i=0;	i<Pixels.length;	i+=Channels )
 	{
 		if ( Channels == 4 )
