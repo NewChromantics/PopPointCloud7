@@ -2,6 +2,37 @@ import {CreateAxisRotationMatrix,Multiply3,GetRayPositionAtTime,MatrixMultiply4x
 import Camera_t from './PopEngine/Camera.js'
 import Pop from './PopEngine/PopEngine.js'
 
+
+const DrawCameraFrustum = true;
+const FarClipScalar = 0.2;
+
+function GenerateVoxelUvs(Width,Height)
+{
+	let Uvs = [];
+	for ( let y=0;	y<Height;	y++ )
+	{
+		for ( let x=0;	x<Width;	x++ )
+		{
+			let u = x/Width;
+			let v = y/Height;
+			Uvs.push(u,v);
+		}
+	}
+	Uvs = new Float32Array(Uvs);
+	return Uvs;
+}
+
+let VoxelUvCache = {};
+function GetVoxelUvs(Width,Height)
+{
+	const Key = `${Width}x${Height}`;
+	if ( !VoxelUvCache[Key] )
+	{
+		VoxelUvCache[Key] = GenerateVoxelUvs(Width,Height);
+	}
+	return VoxelUvCache[Key];
+}
+
 export class DepthCloud_t
 {
 	constructor()
@@ -81,7 +112,7 @@ export class DepthCloud_t
 		}
 		
 		//	camera Frustum
-		//if( false )
+		if( DrawCameraFrustum )
 		{
 			const Uniforms = Object.assign({},CameraUniforms);
 			const Geo = AssetManager.GetAsset('Cube',RenderContext);
@@ -116,21 +147,29 @@ export class DepthCloud_t
 		if ( this.DepthImage )
 		{
 			const Uniforms = Object.assign({},CameraUniforms);
-			const Geo = AssetManager.GetAsset('UnitQuad',RenderContext);
+			const Geo = AssetManager.GetAsset('UnitCube',RenderContext);
 			const Shader = AssetManager.GetAsset(ProjectedGeoShader,RenderContext);
 			
 			const ViewToWorld = this.DepthCamera.GetLocalToWorldFrustumTransformMatrix([0,0,1,1]);
 			
 			Uniforms.DepthViewToWorldTransform = ViewToWorld;
+			Uniforms.DepthViewToCameraTransform = this.DepthCamera.GetScreenToCameraTransform([0,0,1,1]);
+			Uniforms.DepthCameraToWorldTransform = this.DepthCamera.GetLocalToWorldMatrix();
+			
 			Uniforms.LocalToWorldTransform = CreateTranslationScaleMatrix([0,0,0],[1,1,1]);
 			Uniforms.DepthImage = this.DepthImage;
 			Uniforms.DepthImageRect = this.DepthImageRect;
 			Uniforms.DepthImageCrop = this.DepthImageCrop;
-			Uniforms.VoxelUv = [0,0];
+			//Uniforms.VoxelUv = GetVoxelUvs( this.DepthImage.GetWidth(), this.DepthImage.GetHeight() );
+			Uniforms.VoxelUv = GetVoxelUvs( 500, 500 );
+			Uniforms.VoxelSize = 1/100;///10;//0.5/100;//1/this.DepthImage.GetWidth();
+			//Uniforms.VoxelUv = GetVoxelUvs(1,1);
+			//Uniforms.VoxelSize = 1;
 			Uniforms.ColourImage = this.DepthImage;
+			Uniforms.TimeSecs = Pop.GetTimeNowMs()/1000;
 
 			const State = {};
-			State.BlendMode = 'Alpha';
+			//State.BlendMode = 'Alpha';
 			
 			const DrawCube = ['Draw',Geo,Shader,Uniforms,State];
 			PushCommand( DrawCube );
@@ -176,7 +215,7 @@ export async function LoadDepthkitDepthClouds(Meta,AtlasImage)
 		SetMatrixTranslation(DepthCamera.Rotation4x4,0,0,0);
 		DepthCamera.NearDistance = Perspective.nearClip;
 
-		DepthCamera.FarDistance = 0.3*Perspective.farClip;
+		DepthCamera.FarDistance = FarClipScalar*Perspective.farClip;
 		DepthCamera.ZForwardIsNegative = true;
 		DepthCamera.FovVertical = 110;
 		//DepthCamera.FocalCenterOffset = [Perspective.depthPrincipalPoint.x,Perspective.depthPrincipalPoint.y];

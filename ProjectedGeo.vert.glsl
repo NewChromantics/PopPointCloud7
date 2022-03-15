@@ -36,15 +36,38 @@ uniform mat4 CameraProjectionTransform;
 
 
 //	uv -> camera space
-uniform mat4 DepthViewToWorldTransform;
+uniform mat4 DepthViewToCameraTransform;
+uniform mat4 DepthCameraToWorldTransform;
 uniform mat4 LocalToWorldTransform;
 uniform sampler2D DepthImage;
 uniform vec4 DepthImageCrop;	//	this crop = rect of original
 uniform vec4 DepthImageRect;	//	cropping rect
-uniform vec2 VoxelUv;
+in vec2 VoxelUv;
+uniform float VoxelSize;
 
 vec2 GetColourUv(vec2 Uv)
 {
+	Uv = VoxelUv;
+/*
+	mat4 AxisConversion1 = mat4
+	(
+		0,-1,0,0,
+		1,0,0,0,
+		0,0,1,0,
+		0,0,0,1
+	);
+	vec4 SampleUv4 = AxisConversion1 * vec4(VoxelUv,0,1);
+	vec2 SampleUv = SampleUv4.xy/SampleUv4.ww;
+
+	
+	Uv = SampleUv;*/
+	/*
+	vec2 LocalPos = LocalUv.xy * VoxelSize;
+	LocalPos = VoxelUv + LocalPos;
+	Uv=LocalPos;
+	//Uv = mix( VoxelUv+VoxelSize, VoxelUv,Uv);
+	//Uv *= VoxelSize;
+	*/
 	vec2 Min = DepthImageRect.xy;
 	vec2 Max = DepthImageRect.xy + DepthImageRect.zw;
 	
@@ -56,6 +79,7 @@ vec2 GetColourUv(vec2 Uv)
 
 vec2 GetDepthUv(vec2 Uv)
 {
+	Uv = VoxelUv;
 	vec2 Min = DepthImageRect.xy;
 	vec2 Max = DepthImageRect.xy + DepthImageRect.zw;
 	
@@ -65,46 +89,162 @@ vec2 GetDepthUv(vec2 Uv)
 	return DepthUv;
 }
 
+float Range(float Min,float Max,float Value)
+{
+	return (Value-Min) / (Max-Min);
+}
+
+void RainbowToNormalAndScore(out float Normal,out float Score,vec3 Rainbow)
+{
+	//	probbaly a smart way to do this
+	//	one component is always 1.0 and one is always 0.0
+	float r = Rainbow.x;
+	float g = Rainbow.y;
+	float b = Rainbow.z;
+
+	float Tolerance = 45.0;
+	bool rzero = (r<=Tolerance/255.0);
+	bool gzero = (g<=Tolerance/255.0);
+	bool bzero = (b<=Tolerance/255.0);
+	if ( rzero && gzero && bzero )
+	{
+		Score = 0.0;
+		Normal = 0.0;
+		return;
+	}
+
+	if ( bzero )
+	{
+		//	red to green
+		Normal = Range(1.0,0.0,r) + Range(0.0,1.0,g);
+		Normal /= 2.0;
+		Normal = mix( 0.0, 0.333, Normal );
+		Score = 1.0;
+	}
+	else if ( rzero )
+	{
+		//	green to blue
+		Normal = Range(1.0,0.0,g) + Range(0.0,1.0,b);
+		Normal /= 2.0;
+		Normal = mix( 0.333, 0.666, Normal );
+		Score = 1.0;
+	}
+	else if ( gzero )
+	{
+		//	blue to red
+		Normal = Range(1.0,0.0,b) + Range(0.0,1.0,r);
+		Normal /= 2.0;
+		Normal = mix( 0.666, 1.0, Normal );
+		Score = 1.0;
+	}
+	else
+	{
+		Normal = 0.0;
+		Score = 0.5;
+	}
+}
+
+
 //	camera depth = 0...1 (or -1 to 1?)
 float RainbowToCameraDepth(vec3 Rgb)
 {
-	return 0.5;
+	float Score;
+	float Normal;
+	RainbowToNormalAndScore(Normal,Score,Rgb);
+	Normal *= 1.0;
+	return Normal;
 }
+
+#define MAKE_WORLD_TRANSFORM
+uniform float TimeSecs;
 
 mat4 GetLocalToWorldTransform()
 {
+#if !defined(MAKE_WORLD_TRANSFORM)
 	return DepthViewToWorldTransform;
-	
+#else
+	//LocalPos.xy = mix( DepthImageCrop.xy, DepthImageCrop.xy+DepthImageCrop.zw, LocalPos.xy );
+	//LocalPos.z = 1.0;
+/*
+	mat4 AxisConversion1 = mat4
+	(
+		0,-1,0,0,
+		1,0,0,0,
+		0,0,1,0,
+		0,0,0,1
+	);
+	vec4 SampleUv4 = AxisConversion1 * vec4(VoxelUv,0,0);
+	vec2 SampleUv = SampleUv4.xy/SampleUv4.ww;
+	*/
+
 	vec2 DepthUv = GetDepthUv( VoxelUv );
 	vec4 DepthRainbow = texture( DepthImage, DepthUv );
 	float CameraDepth = RainbowToCameraDepth(DepthRainbow.xyz);
-	
+
+	float Time01 = mod(TimeSecs*0.1,1.0);
+	//CameraDepth = CameraDepth * mod(TimeSecs,1.0);
+
+	vec4 Crop = DepthImageCrop;
 	//	get projected position
-	//vec3 ViewPosition = vec3( LocalUv.xy, CameraDepth );
-	vec3 ViewPosition = LocalPosition;
-	vec4 WorldPosition = DepthViewToWorldTransform * vec4(ViewPosition,1.0);
+	//	needs axis conversion... but it shouldn't? this should be sorted in the matrix
+	//	plus, the axis conversion should be in world space, not the projection
+	vec3 ViewPosition = vec3( VoxelUv, 1.0 );
+	//ViewPosition.xy = mix( Crop.xy, Crop.xy+Crop.zw, ViewPosition.xy );
 	
-	WorldPosition.xyz /= WorldPosition.www;
-	WorldPosition.w = 1.0;
+	//ViewPosition.x = 1.0 - ViewPosition.x;
+	ViewPosition.xy = ViewPosition.yx;
+	ViewPosition.y = 1.0 - ViewPosition.y;
+/*
+	vec4 Crop = DepthImageCrop;
+	Crop.xy = Crop.yx;
+	Crop.y = 1.0 - Crop.y;
+*/
+	//	gr: I think this crop is the wrong way round, we have some fat images which should be much thinner
+	ViewPosition.xy = mix( Crop.xy, Crop.xy+Crop.zw, ViewPosition.xy );
+
+	
+	ViewPosition = mix( vec3(-1), vec3(1), ViewPosition );
+	//ViewPosition.xy = mix( vec2(-1), vec2(1), ViewPosition.xy );
+	//ViewPosition.z = 1.0;
+	//ViewPosition.z *= mod(TimeSecs,3.0);
+	
+	vec4 CameraPosition = DepthViewToCameraTransform * vec4(ViewPosition,1.0);
+	
+	CameraPosition.xyz /= CameraPosition.www;
+	//CameraPosition.z *= CameraDepth;
+	CameraPosition.w = 1.0;
+	
+	//CameraPosition.z *= mod(TimeSecs,3.0);
+	
+	vec4 WorldPosition = DepthCameraToWorldTransform * CameraPosition;
 	
 	//	gr: should this transform be rotated (to depth camera's local to world rotation matrix)...
 	mat4 Transform = mat4( 1,0,0,0,
 							0,1,0,0,	
 							0,0,1,0,	
 							WorldPosition );
+	//Transform = DepthViewToWorldTransform;
+	//Transform[3] = WorldPosition;
+	
 	return Transform;
+#endif
 }
 
 
 
 vec3 GetWorldPos(mat4 LocalToWorldTransform)
 {
-	vec3 LocalPos = LocalPosition;
-	//LocalPos *= 0.011;
-	//LocalPos = mix( vec3(0), vec3(1), LocalPos );
-	LocalPos.xy = mix( DepthImageCrop.xy, DepthImageCrop.xy+DepthImageCrop.zw, LocalPos.xy );
-	LocalPos.z = 1.0;
+	vec3 LocalPos = LocalPosition * VoxelSize;
+	//LocalPos.z *= 0.001;
+#if !defined(MAKE_WORLD_TRANSFORM)
+	float z = 0.0;
+	LocalPos = vec3(VoxelUv,z) + LocalPos;
+	//LocalPos = vec3(0,0,0) + LocalPos;
+	//LocalPos.xy = mix( DepthImageCrop.xy, DepthImageCrop.xy+DepthImageCrop.zw, LocalPos.xy );
 	
+	//	need to put this transform into the matrix as it's current a view->world
+	LocalPos = mix( vec3(-1), vec3(1), LocalPos );
+#endif
 	vec4 WorldPos = LocalToWorldTransform * vec4(LocalPos,1.0);
 	WorldPos.xyz /= WorldPos.www;
 	WorldPos.w = 1.0;
@@ -112,10 +252,6 @@ vec3 GetWorldPos(mat4 LocalToWorldTransform)
 	return WorldPos.xyz;
 }
 
-float Range(float Min,float Max,float Value)
-{
-	return (Value-Min) / (Max-Min);
-}
 
 float Range01(float Min,float Max,float Value)
 {
@@ -147,6 +283,8 @@ void main()
 	//FragColour = Colour;//LocalPosition;
 	FragLocalPosition = LocalPosition;
 	FragLocalUv = LocalUv.xy;
+	FragColourUv = GetColourUv(VoxelUv);
+	FragDepthUv = GetDepthUv(VoxelUv);
 	FragColourUv = GetColourUv(LocalUv.xy);
 	FragDepthUv = GetDepthUv(LocalUv.xy);
 	FragLocalNormal = LocalNormal;

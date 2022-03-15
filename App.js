@@ -37,7 +37,7 @@ const RenderDebugQuads = true;	//	need to avoid in xr
 const DebugQuadTilesx = 10;
 const DebugQuadTilesy = 10;
 
-const RenderOctree = true;
+const RenderOctree = false;
 
 
 function GetAllBoundingBoxes(Octree)
@@ -94,6 +94,13 @@ async function CreateDebugQuadTriangleBuffer(RenderContext)
 async function CreateUnitCubeTriangleBuffer(RenderContext)
 {
 	const Geometry = CreateCubeGeometry(0,1);
+	const TriangleIndexes = undefined;
+	const TriBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
+	return TriBuffer;
+}
+async function CreateUnitQuadTriangleBuffer(RenderContext)
+{
+	const Geometry = CreateQuadGeometry(0,1);
 	const TriangleIndexes = undefined;
 	const TriBuffer = await RenderContext.CreateGeometry(Geometry,TriangleIndexes);
 	return TriBuffer;
@@ -300,7 +307,7 @@ export default class App_t
 		AssetManager.RegisterAssetAsyncFetchFunction('Cube', CreateCubeTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('UnitCube', CreateUnitCubeTriangleBuffer );
 		AssetManager.RegisterAssetAsyncFetchFunction('DebugQuad', CreateDebugQuadTriangleBuffer );
-		AssetManager.RegisterAssetAsyncFetchFunction('UnitQuad', CreateDebugQuadTriangleBuffer );
+		AssetManager.RegisterAssetAsyncFetchFunction('UnitQuad', CreateUnitQuadTriangleBuffer );
 
 		const MultiViewMacros = {};
 		MultiViewMacros.MULTI_VIEW = true;
