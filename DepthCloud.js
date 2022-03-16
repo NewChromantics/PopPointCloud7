@@ -4,7 +4,7 @@ import Pop from './PopEngine/PopEngine.js'
 
 
 const DrawCameraFrustum = true;
-const FarClipScalar = 0.2;
+const FarClipScalar = 1.0;
 
 function GenerateVoxelUvs(Width,Height)
 {
@@ -162,11 +162,16 @@ export class DepthCloud_t
 			Uniforms.DepthImageCrop = this.DepthImageCrop;
 			//Uniforms.VoxelUv = GetVoxelUvs( this.DepthImage.GetWidth(), this.DepthImage.GetHeight() );
 			Uniforms.VoxelUv = GetVoxelUvs( 500, 500 );
-			Uniforms.VoxelSize = 1/100;///10;//0.5/100;//1/this.DepthImage.GetWidth();
+			Uniforms.VoxelSize = 1/200;///10;//0.5/100;//1/this.DepthImage.GetWidth();
 			//Uniforms.VoxelUv = GetVoxelUvs(1,1);
 			//Uniforms.VoxelSize = 1;
 			Uniforms.ColourImage = this.DepthImage;
 			Uniforms.TimeSecs = Pop.GetTimeNowMs()/1000;
+			Uniforms.DepthCamera_focalLength = [this.DepthCamera.PixelFocals.fx,this.DepthCamera.PixelFocals.fy];
+			Uniforms.DepthCamera_principalPoint = [this.DepthCamera.PixelFocals.cx,this.DepthCamera.PixelFocals.cy];
+			Uniforms.DepthCamera_imageDimensions = this.DepthCamera.PixelFocals.ImageSize;
+			Uniforms.DepthCamera_maxdepth = this.DepthCamera.FarDistance;
+			Uniforms.DepthCamera_mindepth = this.DepthCamera.NearDistance;
 
 			const State = {};
 			//State.BlendMode = 'Alpha';

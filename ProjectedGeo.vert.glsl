@@ -44,30 +44,22 @@ uniform vec4 DepthImageCrop;	//	this crop = rect of original
 uniform vec4 DepthImageRect;	//	cropping rect
 in vec2 VoxelUv;
 uniform float VoxelSize;
+uniform vec2 DepthCamera_focalLength;
+uniform vec2 DepthCamera_principalPoint;
+uniform vec2 DepthCamera_imageDimensions;
+uniform float DepthCamera_maxdepth;
+uniform float DepthCamera_mindepth;
+
+//#define ROTATE_SAMPLE
 
 vec2 GetColourUv(vec2 Uv)
 {
 	Uv = VoxelUv;
-/*
-	mat4 AxisConversion1 = mat4
-	(
-		0,-1,0,0,
-		1,0,0,0,
-		0,0,1,0,
-		0,0,0,1
-	);
-	vec4 SampleUv4 = AxisConversion1 * vec4(VoxelUv,0,1);
-	vec2 SampleUv = SampleUv4.xy/SampleUv4.ww;
+#if defined(ROTATE_SAMPLE)
+	Uv = Uv.yx;
+	Uv.y = 1.0 - Uv.y;
+#endif
 
-	
-	Uv = SampleUv;*/
-	/*
-	vec2 LocalPos = LocalUv.xy * VoxelSize;
-	LocalPos = VoxelUv + LocalPos;
-	Uv=LocalPos;
-	//Uv = mix( VoxelUv+VoxelSize, VoxelUv,Uv);
-	//Uv *= VoxelSize;
-	*/
 	vec2 Min = DepthImageRect.xy;
 	vec2 Max = DepthImageRect.xy + DepthImageRect.zw;
 	
@@ -80,6 +72,10 @@ vec2 GetColourUv(vec2 Uv)
 vec2 GetDepthUv(vec2 Uv)
 {
 	Uv = VoxelUv;
+#if defined(ROTATE_SAMPLE)
+	Uv = Uv.yx;
+	Uv.y = 1.0 - Uv.y;
+#endif
 	vec2 Min = DepthImageRect.xy;
 	vec2 Max = DepthImageRect.xy + DepthImageRect.zw;
 	
@@ -211,12 +207,53 @@ mat4 GetLocalToWorldTransform()
 	vec4 CameraPosition = DepthViewToCameraTransform * vec4(ViewPosition,1.0);
 	
 	CameraPosition.xyz /= CameraPosition.www;
-	//CameraPosition.z *= CameraDepth;
+	CameraPosition.z *= CameraDepth;
 	CameraPosition.w = 1.0;
 	
 	//CameraPosition.z *= mod(TimeSecs,3.0);
 	
 	vec4 WorldPosition = DepthCameraToWorldTransform * CameraPosition;
+	
+
+
+
+	//	https://github.com/juniorxsound/Depthkit.js/blob/master/src/shaders/rgbd.vert#L127
+	vec2 SampleUv = VoxelUv;
+#if defined(ROTATE_SAMPLE)
+	
+	SampleUv.xy = SampleUv.yx;
+	//SampleUv.x = 1.0-SampleUv.x;
+	//SampleUv.y = 1.0-SampleUv.y;
+#endif
+	vec4 crop = DepthImageCrop;
+	vec2 DepthImageTextureSize = vec2(textureSize(DepthImage,0));
+	//vec2 DepthImageTextureSize = DepthImageRect.zw * vec2(textureSize(DepthImage,0));
+	DepthImageTextureSize = DepthCamera_imageDimensions;
+	//DepthImageTextureSize = (DepthImageRect.zw*0.5) * DepthImageTextureSize;
+	float width = DepthImageTextureSize.x;
+	float height = DepthImageTextureSize.y;
+	vec4 texSize = vec4(1.0 / width, 1.0 / height, width, height);
+	//vec2 centerpix = texSize.xy * .5;
+	//vec2 textureStep = 1.0 / meshDensity;
+	//vec2 basetex = floor(position.xy * textureStep * texSize.zw) * texSize.xy;
+	vec2 basetex = floor(SampleUv.xy * texSize.zw) * texSize.xy;
+	vec2 imageCoordinates = crop.xy + (basetex * crop.zw);
+	basetex.y = 1.0 - basetex.y;
+	
+	//imageCoordinates.xy = imageCoordinates.yx;
+	//imageCoordinates.y = 1.0-imageCoordinates.y;
+	//imageCoordinates.x = 1.0-imageCoordinates.x;
+
+	//CameraDepth=0.0;
+	float z = CameraDepth * (DepthCamera_maxdepth - DepthCamera_mindepth) + DepthCamera_mindepth;
+	z *= -1.0;
+	WorldPosition = DepthCameraToWorldTransform * vec4((imageCoordinates * DepthCamera_imageDimensions - DepthCamera_principalPoint) * z / DepthCamera_focalLength, z, 1.0);
+	WorldPosition.xyz /= WorldPosition.www;
+	WorldPosition.w = 1.0;
+	
+	
+	
+	
 	
 	//	gr: should this transform be rotated (to depth camera's local to world rotation matrix)...
 	mat4 Transform = mat4( 1,0,0,0,
