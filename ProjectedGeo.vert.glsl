@@ -50,9 +50,10 @@ uniform vec2 DepthCamera_imageDimensions;
 uniform float DepthCamera_maxdepth;
 uniform float DepthCamera_mindepth;
 
-uniform bool Sample_Rotate; 
+uniform bool Uv_Rotate; 
 uniform bool Uv_Flip;
 uniform bool Uv_Mirror;
+uniform bool Voxel_Rotate;
 uniform bool Voxel_Mirror;
 uniform bool Voxel_Flip;
 uniform bool View_Mirror;
@@ -63,9 +64,10 @@ uniform bool Depth_Zero;
 
 
 //	scientist left hand is in the air!
-#define ROTATE_SAMPLE	Sample_Rotate
+#define UV_ROTATE	Uv_Rotate
 #define UV_FLIP		Uv_Flip
 #define UV_MIRROR		Uv_Mirror
+#define VOXEL_ROTATE	Voxel_Rotate
 #define VOXEL_MIRROR	Voxel_Mirror
 #define VOXEL_FLIP	Voxel_Flip
 #define VIEW_MIRROR	View_Mirror
@@ -83,7 +85,7 @@ vec2 GetColourUv(vec2 Uv)
 		Uv.x = 1.0 - Uv.x;
 	if(UV_FLIP)
 		Uv.y = 1.0 - Uv.y;
-	if(ROTATE_SAMPLE)
+	if(UV_ROTATE)
 		Uv = Uv.yx;
 
 	vec2 Min = DepthImageRect.xy;
@@ -102,7 +104,7 @@ vec2 GetDepthUv(vec2 Uv)
 		Uv.x = 1.0 - Uv.x;
 	if(UV_FLIP)
 		Uv.y = 1.0 - Uv.y;
-	if(ROTATE_SAMPLE)
+	if(UV_ROTATE)
 		Uv = Uv.yx;
 
 	if ( MIDDLE_DEPTH)
@@ -274,7 +276,7 @@ mat4 GetLocalToWorldTransform()
 	vec2 SampleUv = VoxelUv;
 	vec4 crop = DepthImageCrop;
 
-	if (ROTATE_SAMPLE)
+	if (VOXEL_ROTATE)
 		SampleUv.xy = SampleUv.yx;
 
 	if(VOXEL_MIRROR)

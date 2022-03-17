@@ -1,8 +1,9 @@
 const Params = {};
 export default Params;
-Params.Sample_Rotate = true; 
+Params.Uv_Rotate = false; 
 Params.Uv_Flip = false; 
 Params.Uv_Mirror = true; 
+Params.Voxel_Rotate = true; 
 Params.Voxel_Mirror = false; 
 Params.Voxel_Flip = false; 
 Params.View_Mirror = false; 
