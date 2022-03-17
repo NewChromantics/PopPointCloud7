@@ -1,3 +1,6 @@
 [submodule "PopEngine"]
 	path = PopEngine
 	url = https://github.com/NewChromantics/PopEngineCommon.git
+[submodule "WebComponent_TreeView"]
+	path = WebComponent_TreeView
+	url = https://github.com/NewChromantics/WebComponent_TreeView.git
