@@ -1,10 +1,13 @@
 import {CreateAxisRotationMatrix,Multiply3,GetRayPositionAtTime,MatrixMultiply4x4,CreateScaleMatrix,GetMatrixTransposed,MatrixInverse4x4,CreateTranslationScaleMatrix,BoxCenterSizeToMinMax,GetMatrixTranslation,SetMatrixTranslation} from './PopEngine/Math.js'
 import Camera_t from './PopEngine/Camera.js'
 import Pop from './PopEngine/PopEngine.js'
+import Params from './Params.js'
 
 
 const DrawCameraFrustum = true;
-const FarClipScalar = 1.0;
+const DebugCameraSize = 0.01;
+const DebugRaySize = 0.008;
+		
 
 function GenerateVoxelUvs(Width,Height)
 {
@@ -45,9 +48,6 @@ export class DepthCloud_t
 	//	gr: it should also not rely on some external render camera uniforms
 	GetRenderCommands(PushCommand,RenderContext,CameraUniforms,AssetManager,BoundingBoxShader,PlainColourShader,ProjectedGeoShader)
 	{
-		const DebugCameraSize = 0.1;
-		const DebugRaySize = 0.008;
-		
 		//	camera position
 		{
 			const Uniforms = Object.assign({},CameraUniforms);
@@ -151,7 +151,9 @@ export class DepthCloud_t
 			const Shader = AssetManager.GetAsset(ProjectedGeoShader,RenderContext);
 			
 			const ViewToWorld = this.DepthCamera.GetLocalToWorldFrustumTransformMatrix([0,0,1,1]);
-			
+
+			Object.assign( Uniforms, Params );
+	
 			Uniforms.DepthViewToWorldTransform = ViewToWorld;
 			Uniforms.DepthViewToCameraTransform = this.DepthCamera.GetScreenToCameraTransform([0,0,1,1]);
 			Uniforms.DepthCameraToWorldTransform = this.DepthCamera.GetLocalToWorldMatrix();
@@ -161,8 +163,8 @@ export class DepthCloud_t
 			Uniforms.DepthImageRect = this.DepthImageRect;
 			Uniforms.DepthImageCrop = this.DepthImageCrop;
 			//Uniforms.VoxelUv = GetVoxelUvs( this.DepthImage.GetWidth(), this.DepthImage.GetHeight() );
-			Uniforms.VoxelUv = GetVoxelUvs( 500, 500 );
-			Uniforms.VoxelSize = 1/200;///10;//0.5/100;//1/this.DepthImage.GetWidth();
+			Uniforms.VoxelUv = GetVoxelUvs( 250, 250 );
+			Uniforms.VoxelSize = 1/100;///10;//0.5/100;//1/this.DepthImage.GetWidth();
 			//Uniforms.VoxelUv = GetVoxelUvs(1,1);
 			//Uniforms.VoxelSize = 1;
 			Uniforms.ColourImage = this.DepthImage;
@@ -205,23 +207,61 @@ export async function LoadDepthkitDepthClouds(Meta,AtlasImage)
 			Ext.e02, Ext.e12, Ext.e22, Ext.e32,
 			Ext.e03, Ext.e13, Ext.e23, Ext.e33,
 		];
-		const AxisConversion1 =
+		let AxisConversionPointInwards =
 		[
 			0,-1,0,0,
 			1,0,0,0,
 			0,0,1,0,
 			0,0,0,1
 		];
+		let AxisConversionPointOutwards =
+		[
+			0,1,0,0,
+			1,0,0,0,
+			0,0,-1,0,
+			0,0,0,1
+		];
+		let AxisConversionPointOutwardsFlip =
+		[
+			0,1,0,0,
+			-1,0,0,0,
+			0,0,-1,0,
+			0,0,0,1
+		];
+		/*
+		AxisConversion1 =
+		[
+			1,0,0,0,
+			0,1,0,0,
+			0,0,1,0,
+			0,0,0,1
+		];
+		*/
+		//CameraToWorld = MatrixMultiply4x4( CameraToWorld, AxisConversionPointInwards );
+		//CameraToWorld = MatrixMultiply4x4( CameraToWorld, AxisConversionPointOutwards );
+		CameraToWorld = MatrixMultiply4x4( CameraToWorld, AxisConversionPointOutwardsFlip );
 		
-		CameraToWorld = MatrixMultiply4x4( CameraToWorld, AxisConversion1 );
+		
+		//	draw in a row
+		if( false )
+		CameraToWorld = 
+		[
+			1,	0,	0,	0,
+			0,					1,	0,	0,
+			0,					0,	-1,	0,
+			PerspectiveIndex,					0,	0,	1
+			//Ext.e03, Ext.e13, Ext.e23, Ext.e33,
+		];
+		
+		
 		DepthCamera.Rotation4x4 = CameraToWorld.slice();
 		DepthCamera.Position = GetMatrixTranslation(CameraToWorld,true);
 		DepthCamera.Position[1] *= FlipY;
 		SetMatrixTranslation(DepthCamera.Rotation4x4,0,0,0);
 		DepthCamera.NearDistance = Perspective.nearClip;
 
-		DepthCamera.FarDistance = FarClipScalar*Perspective.farClip;
-		DepthCamera.ZForwardIsNegative = true;
+		DepthCamera.FarDistance = Perspective.farClip;
+		//DepthCamera.ZForwardIsNegative = true;
 		DepthCamera.FovVertical = 110;
 		//DepthCamera.FocalCenterOffset = [Perspective.depthPrincipalPoint.x,Perspective.depthPrincipalPoint.y];
 		
@@ -250,8 +290,8 @@ export async function LoadDepthkitDepthClouds(Meta,AtlasImage)
 		*/
 		//	probably need to split this into colour rect & depth rect
 		const Crop = Perspective.crop;
-		//	this is a weird set of values
-		//	x = 0 0.1
+		//Crop.x = 0;
+		//Crop.y = 0;	
 		const CropRect = [Crop.x,Crop.y,Crop.z,Crop.w];
 		const CellsWidth = 3;
 		const CellsHeight = 2;
@@ -270,7 +310,10 @@ export async function LoadDepthkitDepthClouds(Meta,AtlasImage)
 		Cloud.DepthImageCrop = CropRect;
 		Cloud.BoundingBox = BoundingBox;
 		Cloud.DepthCamera = DepthCamera;
+		//if ( PerspectiveIndex == 3 )
 		Clouds.push(Cloud);
+		if ( PerspectiveIndex == 199 )
+			break;
 	}
 	
 	console.log(`LoadDepthkitDepthClouds`,Meta);

@@ -2,7 +2,7 @@ import Pop from './PopEngine/PopEngine.js'
 import FrameCounter_t from './PopEngine/FrameCounter.js'
 import App_t from './App.js'
 import {WaitForFrame} from './PopEngine/PopWebApi.js'
-
+import Params from './Params.js'
 
 //	detect whne XR has stopped rendering and only render desktop then
 let LastXrRenderTimeMs = null;
@@ -13,6 +13,31 @@ const ForceXrLayerType = null;
 //const ForceXrLayerType = 'StereoLayer';
 //const ForceXrLayerType = 'Classic';
 
+function SetupParamsGui(ParamsGui)
+{
+	function OnChanged()
+	{
+		console.log(`Params changed`);
+		Object.assign( Params, ParamsGui.json );
+	}
+	
+	if ( !ParamsGui )
+		return;
+
+	//	all params are writable
+	//	todo: is this where we want regex for keys?
+	const Meta = {};
+	for ( let Key in Params )
+	{
+		Meta[Key] = { Writable:true };
+	}
+	ParamsGui.meta = Meta;
+
+	//	gr: currently have to set meta first
+	//		as input eleents aren't re-created yet	
+	ParamsGui.json = Params;
+	ParamsGui.onchange = OnChanged;	
+}
 
 
 async function RenderLoop(Canvas,XrOnWaitForCallback)
@@ -136,7 +161,8 @@ async function RenderLoop(Canvas,XrOnWaitForCallback)
 }
 
 
-export default async function Bootup(XrOnWaitForCallback)
+export default async function Bootup(XrOnWaitForCallback,ParamsGui)
 {
+	SetupParamsGui(ParamsGui);
 	await RenderLoop('Window',XrOnWaitForCallback);
 }

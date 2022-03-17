@@ -1,0 +1,12 @@
+const Params = {};
+export default Params;
+Params.Sample_Rotate = true; 
+Params.Uv_Flip = false; 
+Params.Uv_Mirror = true; 
+Params.Voxel_Mirror = false; 
+Params.Voxel_Flip = false; 
+Params.View_Mirror = false; 
+Params.View_Flip = false; 
+Params.Crop_Mirror = false; 
+Params.Depth_Middle = false; 
+Params.Depth_Zero = false;

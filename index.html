@@ -1,6 +1,7 @@
 <html>
 <head>
-<title>8x8.space</title>
+<title>Point clouds are fun.</title>
+<script src="./WebComponent_TreeView/TreeView.js" type="module"></script>
 <style>
 
 body
@@ -18,7 +19,7 @@ canvas
 
 button#StartXr
 {
-zdisplay:none !important;
+display:none !important;
 	font-size:		6vmax;
 	font-weight:	bold;
 	font-family:	sans-serif;
@@ -31,6 +32,19 @@ zdisplay:none !important;
 	height:		200px;
 }
 
+#Params
+{
+	position:	absolute;
+	bottom:	1em;
+	left:	1em;
+	xheight:	60em;
+	xwidth:	20em;
+	background:	rgba(255,255,255,0.5);
+	border:	1px solid rgba(0,0,0,0.5);
+	z-index:	100;
+	font-family:	Arial;
+}
+
 </style>
 
 
@@ -38,6 +52,7 @@ zdisplay:none !important;
 <body>
 <button id="StartXr">Start XR</button>
 <canvas id=Window></canvas>
+<tree-view id=Params css="./WebComponent_TreeView/TreeView.css"></tree-view>
 <script type="module">
 import Bootup from './Main.js'
 
@@ -54,7 +69,7 @@ function StartXrCallback(Start)
 	Button.onclick = OnClicked;
 }	
 
-Bootup(StartXrCallback).then(console.log).catch(console.error);
+Bootup(StartXrCallback,Params).then(console.log).catch(console.error);
 
 </script>
 

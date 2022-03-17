@@ -50,15 +50,41 @@ uniform vec2 DepthCamera_imageDimensions;
 uniform float DepthCamera_maxdepth;
 uniform float DepthCamera_mindepth;
 
-//#define ROTATE_SAMPLE
+uniform bool Sample_Rotate; 
+uniform bool Uv_Flip;
+uniform bool Uv_Mirror;
+uniform bool Voxel_Mirror;
+uniform bool Voxel_Flip;
+uniform bool View_Mirror;
+uniform bool View_Flip;
+uniform bool Crop_Mirror;
+uniform bool Depth_Middle;
+uniform bool Depth_Zero;
+
+
+//	scientist left hand is in the air!
+#define ROTATE_SAMPLE	Sample_Rotate
+#define UV_FLIP		Uv_Flip
+#define UV_MIRROR		Uv_Mirror
+#define VOXEL_MIRROR	Voxel_Mirror
+#define VOXEL_FLIP	Voxel_Flip
+#define VIEW_MIRROR	View_Mirror
+#define VIEW_FLIP		View_Flip
+#define MIRROR_CROP		Crop_Mirror
+#define MIDDLE_DEPTH	Depth_Middle
+#define ZERO_DEPTH	Depth_Zero
+#define PROJECTION_BACKWARDS	false
+
 
 vec2 GetColourUv(vec2 Uv)
 {
 	Uv = VoxelUv;
-#if defined(ROTATE_SAMPLE)
-	Uv = Uv.yx;
-	Uv.y = 1.0 - Uv.y;
-#endif
+	if (UV_MIRROR)
+		Uv.x = 1.0 - Uv.x;
+	if(UV_FLIP)
+		Uv.y = 1.0 - Uv.y;
+	if(ROTATE_SAMPLE)
+		Uv = Uv.yx;
 
 	vec2 Min = DepthImageRect.xy;
 	vec2 Max = DepthImageRect.xy + DepthImageRect.zw;
@@ -72,10 +98,16 @@ vec2 GetColourUv(vec2 Uv)
 vec2 GetDepthUv(vec2 Uv)
 {
 	Uv = VoxelUv;
-#if defined(ROTATE_SAMPLE)
-	Uv = Uv.yx;
-	Uv.y = 1.0 - Uv.y;
-#endif
+	if (UV_MIRROR)
+		Uv.x = 1.0 - Uv.x;
+	if(UV_FLIP)
+		Uv.y = 1.0 - Uv.y;
+	if(ROTATE_SAMPLE)
+		Uv = Uv.yx;
+
+	if ( MIDDLE_DEPTH)
+		Uv=vec2(0.5,0.5);
+
 	vec2 Min = DepthImageRect.xy;
 	vec2 Max = DepthImageRect.xy + DepthImageRect.zw;
 	
@@ -90,22 +122,43 @@ float Range(float Min,float Max,float Value)
 	return (Value-Min) / (Max-Min);
 }
 
+const float _DepthSaturationThreshhold = 0.5; //a given pixel whose saturation is less than half will be culled (old default was .5)
+const float _DepthBrightnessThreshold = 0.5; //a given pixel whose brightness is less than half will be culled (old default was .9)
+const float  _Epsilon = .03;
+
+vec3 rgb2hsv(vec3 c)
+{
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+    float d = q.x - min(q.w, q.y);
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + _Epsilon)), d / (q.x + _Epsilon), q.x);
+}
+
+
 void RainbowToNormalAndScore(out float Normal,out float Score,vec3 Rainbow)
 {
+	vec3 depthsample = Rainbow;
+    vec3 depthsamplehsv = rgb2hsv(depthsample.rgb);
+    Normal = depthsamplehsv.r;
+    Score = depthsamplehsv.g > _DepthSaturationThreshhold && depthsamplehsv.b > _DepthBrightnessThreshold ? 1.0 : 0.0;
+    return;
+
 	//	probbaly a smart way to do this
 	//	one component is always 1.0 and one is always 0.0
 	float r = Rainbow.x;
 	float g = Rainbow.y;
 	float b = Rainbow.z;
 
-	float Tolerance = 45.0;
-	bool rzero = (r<=Tolerance/255.0);
-	bool gzero = (g<=Tolerance/255.0);
-	bool bzero = (b<=Tolerance/255.0);
+	float Tolerance = 40.0 / 255.0;
+	bool rzero = (r<=Tolerance);
+	bool gzero = (g<=Tolerance);
+	bool bzero = (b<=Tolerance);
 	if ( rzero && gzero && bzero )
 	{
 		Score = 0.0;
-		Normal = 0.0;
+		Normal = 1.0;
 		return;
 	}
 
@@ -135,7 +188,7 @@ void RainbowToNormalAndScore(out float Normal,out float Score,vec3 Rainbow)
 	}
 	else
 	{
-		Normal = 0.0;
+		Normal = 1.0;
 		Score = 0.5;
 	}
 }
@@ -147,7 +200,7 @@ float RainbowToCameraDepth(vec3 Rgb)
 	float Score;
 	float Normal;
 	RainbowToNormalAndScore(Normal,Score,Rgb);
-	Normal *= 1.0;
+	Normal *= Score;
 	return Normal;
 }
 
@@ -219,16 +272,28 @@ mat4 GetLocalToWorldTransform()
 
 	//	https://github.com/juniorxsound/Depthkit.js/blob/master/src/shaders/rgbd.vert#L127
 	vec2 SampleUv = VoxelUv;
-#if defined(ROTATE_SAMPLE)
-	
-	SampleUv.xy = SampleUv.yx;
-	//SampleUv.x = 1.0-SampleUv.x;
-	//SampleUv.y = 1.0-SampleUv.y;
-#endif
 	vec4 crop = DepthImageCrop;
-	vec2 DepthImageTextureSize = vec2(textureSize(DepthImage,0));
+
+	if (ROTATE_SAMPLE)
+		SampleUv.xy = SampleUv.yx;
+
+	if(VOXEL_MIRROR)
+	SampleUv.x = 1.0-SampleUv.x;
+
+	if(VOXEL_FLIP)
+	SampleUv.y = 1.0-SampleUv.y;
+
+	//SampleUv.y = 1.0-SampleUv.y;
+	if(MIRROR_CROP)
+	{
+		//	width/height stays the same, offset from edge changes
+		vec2 croprb = crop.xy + crop.zw;
+		crop.x = 1.0 - croprb.x;
+	}
+
+	vec2 DepthImageTextureSize = DepthCamera_imageDimensions;
 	//vec2 DepthImageTextureSize = DepthImageRect.zw * vec2(textureSize(DepthImage,0));
-	DepthImageTextureSize = DepthCamera_imageDimensions;
+//	DepthImageTextureSize = DepthCamera_imageDimensions;
 	//DepthImageTextureSize = (DepthImageRect.zw*0.5) * DepthImageTextureSize;
 	float width = DepthImageTextureSize.x;
 	float height = DepthImageTextureSize.y;
@@ -236,17 +301,39 @@ mat4 GetLocalToWorldTransform()
 	//vec2 centerpix = texSize.xy * .5;
 	//vec2 textureStep = 1.0 / meshDensity;
 	//vec2 basetex = floor(position.xy * textureStep * texSize.zw) * texSize.xy;
-	vec2 basetex = floor(SampleUv.xy * texSize.zw) * texSize.xy;
-	vec2 imageCoordinates = crop.xy + (basetex * crop.zw);
-	basetex.y = 1.0 - basetex.y;
+	//vec2 basetex = floor(SampleUv.xy * texSize.zw) * texSize.xy;
+	vec2 basetex = SampleUv.xy;
+	//crop = vec4(0,0,1,1);
+	//	coords are normalised
+	vec2 imageCoordinates = mix( crop.xy, crop.xy+crop.zw, basetex );
+	//basetex.y = 1.0 - basetex.y;
 	
+	if(VIEW_MIRROR)
+		imageCoordinates.x = 1.0 - imageCoordinates.x;
+
+	if(VIEW_FLIP)
+		imageCoordinates.y = 1.0 - imageCoordinates.y;
+
+	if (PROJECTION_BACKWARDS)
+	{
+		//	this makes crop 0,0 top left
+		imageCoordinates.x = 1.0 - imageCoordinates.x;
+		imageCoordinates.y = 1.0 - imageCoordinates.y;
+	}
+		
 	//imageCoordinates.xy = imageCoordinates.yx;
 	//imageCoordinates.y = 1.0-imageCoordinates.y;
 	//imageCoordinates.x = 1.0-imageCoordinates.x;
 
-	//CameraDepth=0.0;
+	if (ZERO_DEPTH)
+		CameraDepth=0.0;
+
+	//CameraDepth=0.5;
 	float z = CameraDepth * (DepthCamera_maxdepth - DepthCamera_mindepth) + DepthCamera_mindepth;
-	z *= -1.0;
+	//float z = CameraDepth * (4.0 - 1.0) + 1.0;
+	if (PROJECTION_BACKWARDS)
+		z *= -1.0;
+	
 	WorldPosition = DepthCameraToWorldTransform * vec4((imageCoordinates * DepthCamera_imageDimensions - DepthCamera_principalPoint) * z / DepthCamera_focalLength, z, 1.0);
 	WorldPosition.xyz /= WorldPosition.www;
 	WorldPosition.w = 1.0;
